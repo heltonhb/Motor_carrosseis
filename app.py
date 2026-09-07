@@ -391,6 +391,61 @@ Retorne JSON:
 }"""
 
 
+PROMPT_LEGENDAS = """Você é o social media manager e copywriter da Ensina Mais Tatuapé (@ensinamais.tatuape).
+
+Com base no carrossel abaixo, gere 3 OPÇÕES DE LEGENDA para o Instagram.
+
+### CONTEXTO DA UNIDADE:
+- Endereço: Rua Coelho Lisboa, 783 – Tatuapé, São Paulo
+- WhatsApp: (11) 94475-0009
+- Público: Pais de classes A/B do Tatuapé, filhos no Ensino Fundamental
+- Colégios vizinhos: Mendel, Santo Antônio de Lisboa, Espírito Santo
+
+### REGRAS PARA CADA LEGENDA:
+
+1. **Estrutura obrigatória:**
+   - GANCHO (1ª linha): Frase curta e impactante que para o scroll. Pode ser pergunta, dado chocante ou afirmação polêmica.
+   - CORPO (2-3 parágrafos curtos): Desenvolvimento do tema com valor prático. Use quebras de linha para facilitar leitura no celular.
+   - CTA: Chamada para ação clara (comentar palavra-chave, salvar, enviar DM)
+   - HASHTAGS: 5-7 hashtags relevantes (inclua #ApoioEscolarTatuapé #ReforçoEscolarTatuapé #EnsinaMaisTatuapé)
+
+2. **Tom de voz:**
+   - Empático com a dor dos pais
+   - Didático sem ser infantil
+   - Autêntico, não institucional
+   - Use linguagem natural, como se estivesse conversando com um pai ou mãe
+
+3. **SEO Local obrigatório:**
+   - Mencionar "Tatuapé" pelo menos 1 vez no corpo
+   - Mencionar "apoio escolar" ou "reforço escolar"自然mente
+
+4. **Palavra-chave CTA:**
+   - Cada legenda deve terminar com a instrução de comentar a palavra-chave do carrossel
+
+5. **Extensão:**
+   - Máximo 2.200 caracteres (limite do Instagram)
+   - Ideal: 800-1500 caracteres
+
+### FORMATO DE SAÍDA:
+
+Retorne JSON:
+{
+  "legendas": [
+    {
+      "opcao": 1,
+      "estilo": "Despertar curiosidade / Educativo / Emocional",
+      "gancho": "Primeira linha que para o scroll",
+      "corpo": "Desenvolvimento do tema com价值实践",
+      "cta": "Chamada para ação com palavra-chave",
+      "hashtags": "#ApoioEscolarTatuapé #ReforçoEscolarTatuapé ...",
+      "legenda_completa": "GANCHO\\n\\nCORPO\\n\\nCTA\\n\\nHASHTAGS",
+      "char_count": 1200
+    }
+  ],
+  "dicas_uso": "Dicas de como usar cada opção"
+}"""
+
+
 # ─── Funções auxiliares ──────────────────────────────────────────────────────
 import time
 
@@ -720,11 +775,12 @@ st.markdown("""
 """)
 
 # ─── Tabs Principais ─────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Análise de Tendências",
     "💡 Ideias de Carrossel",
     "🎨 Prompts Google Flow",
     "🖼️ Gerador de Imagens",
+    "📝 Legendas",
     "📅 Cronograma & Acompanhamento",
     "📦 Processador em Lote"
 ])
@@ -1099,9 +1155,126 @@ with tab4:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5: CRONOGRAMA & ACOMPANHAMENTO
+# TAB 5: LEGENDAS
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab5:
+    st.markdown("## 📝 Gerador de Legendas")
+    st.markdown("Gera 3 opções de legenda conectadas ao tema do carrossel selecionado.")
+
+    if "ideias_selecionadas" not in st.session_state or not st.session_state["ideias_selecionadas"]:
+        st.info("📌 Selecione ideias na aba 'Ideias de Carrossel' primeiro.")
+    else:
+        ideias_sel = st.session_state["ideias_selecionadas"]
+
+        # Escolher qual ideia gerar legenda
+        opcoes_legenda = {f"{i.get('eixo', '?')} — {i.get('titulo', '')}": i for i in ideias_sel}
+        escolha = st.selectbox("Escolha o carrossel para gerar legendas:", list(opcoes_legenda.keys()), key="escolha_legenda")
+
+        if st.button("📝 Gerar Legendas", type="primary", use_container_width=True):
+            if not st.session_state.get("gemini_key"):
+                st.warning("⚠️ Insira sua chave API Gemini na barra lateral.")
+            else:
+                ideia_escolhida = opcoes_legenda[escolha]
+                with st.spinner("🤖 Gerando 3 opções de legenda..."):
+                    result = call_gemini(PROMPT_LEGENDAS, f"Carrossel:\n{json.dumps(ideia_escolhida, ensure_ascii=False)}")
+                    if result:
+                        st.session_state["legendas"] = extract_json(result)
+                        st.success("✅ 3 legendas geradas!")
+
+        if "legendas" in st.session_state and st.session_state["legendas"]:
+            legendas = st.session_state["legendas"]
+
+            # Mostrar as 3 opções
+            for leg in legendas.get("legendas", []):
+                opcao = leg.get("opcao", "?")
+                estilo = leg.get("estilo", "")
+                gancho = leg.get("gancho", "")
+                corpo = leg.get("corpo", "")
+                cta = leg.get("cta", "")
+                hashtags = leg.get("hashtags", "")
+                legenda_completa = leg.get("legenda_completa", "")
+                char_count = leg.get("char_count", 0)
+
+                # Cores por estilo
+                estilo_cores = {
+                    "Despertar curiosidade": "#E63946",
+                    "Educativo": "#4ECDC4",
+                    "Emocional": "#FFD166",
+                    "Dado chocante": "#E63946",
+                    "Pergunta": "#4ECDC4",
+                    "Polêmico": "#FFD166",
+                }
+                cor = estilo_cores.get(estilo, "#4ECDC4")
+
+                with st.expander(f"{'🔴' if opcao == 1 else '🟡' if opcao == 2 else '🟢'} Opção {opcao} — {estilo}", expanded=(opcao == 1)):
+                    # Estrutura da legenda
+                    st.markdown(f"**🎣 Gancho:**")
+                    st.markdown(f"> {gancho}")
+
+                    st.markdown(f"**📖 Corpo:**")
+                    st.markdown(f"> {corpo}")
+
+                    st.markdown(f"**📢 CTA:**")
+                    st.markdown(f"> {cta}")
+
+                    st.markdown(f"**# Hashtags:**")
+                    st.markdown(f"> {hashtags}")
+
+                    st.markdown("---")
+
+                    # Legenda completa (pronta para copiar)
+                    st.markdown(f"**📋 Legenda Completa (copie e cole no Instagram):**")
+                    st.code(legenda_completa, language=None)
+
+                    # Contagem de caracteres
+                    if char_count > 2200:
+                        st.error(f"⚠️ {char_count} caracteres — acima do limite do Instagram (2.200)")
+                    elif char_count > 1800:
+                        st.warning(f"⏳ {char_count} caracteres — próximo do limite")
+                    else:
+                        st.success(f"✅ {char_count} caracteres — dentro do ideal")
+
+                    # Botão de copiar
+                    if st.button(f"📋 Copiar Legenda Opção {opcao}", key=f"copy_leg_{opcao}"):
+                        st.code(legenda_completa, language=None)
+                        st.success("Legenda copiada! Cole direto no Instagram.")
+
+            # Dicas de uso
+            dicas = legendas.get("dicas_uso", "")
+            if dicas:
+                st.markdown("---")
+                st.markdown("### 💡 Dicas de Uso")
+                st.info(dicas)
+
+            # Exportar legendas
+            st.markdown("---")
+            if st.button("📥 Exportar Legendas (JSON)", use_container_width=True):
+                export = json.dumps(legendas, ensure_ascii=False, indent=2)
+                st.download_button(
+                    label="⬇️ Download JSON",
+                    data=export,
+                    file_name="legendas_carrossel.json",
+                    mime="application/json"
+                )
+
+            # Exportar apenas as legendas completas em .txt
+            if st.button("📄 Exportar Legendas (.txt)", use_container_width=True):
+                txt_content = "\n\n---\n\n".join(
+                    f"OPÇÃO {leg.get('opcao', '?')} — {leg.get('estilo', '')}\n\n{leg.get('legenda_completa', '')}"
+                    for leg in legendas.get("legendas", [])
+                )
+                st.download_button(
+                    label="⬇️ Download .txt",
+                    data=txt_content,
+                    file_name="legendas_carrossel.txt",
+                    mime="text/plain"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 6: CRONOGRAMA & ACOMPANHAMENTO
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab6:
     st.markdown("## 📅 Cronograma de Postagens & Acompanhamento")
 
     if "ideias_selecionadas" not in st.session_state or not st.session_state["ideias_selecionadas"]:
@@ -1273,9 +1446,9 @@ with tab5:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 6: PROCESSADOR EM LOTE
+# TAB 7: PROCESSADOR EM LOTE
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab6:
+with tab7:
     st.markdown("## 📦 Processador em Lote")
     st.markdown("Gere múltiplos carrosséis de uma vez. Selecione quantas ideias quiser e gere tudo junto.")
 
