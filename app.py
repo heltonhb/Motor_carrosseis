@@ -391,8 +391,10 @@ Retorne JSON:
 
 
 # ─── Funções auxiliares ──────────────────────────────────────────────────────
-def call_gemini(prompt: str, context: str = "") -> str:
-    """Chama o Gemini via REST API com fallback de modelos."""
+import time
+
+def call_gemini(prompt: str, context: str = "", max_retries: int = 3) -> str:
+    """Chama o Gemini via REST API com fallback de modelos e retries automáticos."""
     api_key = st.session_state.get("gemini_key", os.environ.get("GEMINI_API_KEY", ""))
     if not api_key:
         return ""
@@ -401,20 +403,52 @@ def call_gemini(prompt: str, context: str = "") -> str:
     modelos = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
 
     for model_name in modelos:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-            payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
-            r = requests.post(url, json=payload, timeout=60)
-            if r.status_code == 200:
-                data = r.json()
-                text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                if text:
-                    return text
-            else:
-                st.warning(f"Modelo {model_name} retornou {r.status_code}, tentando próximo...")
-        except Exception as e:
-            st.warning(f"Modelo {model_name} falhou: {str(e)[:50]}")
-            continue
+        for attempt in range(max_retries):
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
+                r = requests.post(url, json=payload, timeout=90)
+                if r.status_code == 200:
+                    data = r.json()
+                    text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if text:
+                        return text
+                elif r.status_code == 429:
+                    # Rate limit - esperar e retry
+                    wait_time = 2 ** attempt * 2
+                    st.warning(f"Rate limit atingido. Aguardando {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                elif r.status_code >= 500:
+                    # Erro de servidor - retry com backoff
+                    wait_time = 2 ** attempt
+                    st.warning(f"Erro {r.status_code} no servidor. Retry {attempt+1}/{max_retries} em {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    st.warning(f"Modelo {model_name} retornou {r.status_code}, tentando próximo...")
+                    break
+            except requests.exceptions.ConnectionError as e:
+                # Erro de conexão - retry com backoff
+                wait_time = 2 ** attempt
+                if attempt < max_retries - 1:
+                    st.warning(f"Erro de conexão. Retry {attempt+1}/{max_retries} em {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    st.warning(f"Modelo {model_name} falhou após {max_retries} tentativas.")
+                    break
+            except requests.exceptions.Timeout:
+                # Timeout - retry
+                wait_time = 2 ** attempt
+                if attempt < max_retries - 1:
+                    st.warning(f"Timeout. Retry {attempt+1}/{max_retries} em {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    st.warning(f"Modelo {model_name} timeout após {max_retries} tentativas.")
+                    break
+            except Exception as e:
+                st.warning(f"Modelo {model_name} falhou: {str(e)[:80]}")
+                break
 
     st.error("Todos os modelos Gemini estão temporariamente indisponíveis. Tente novamente em alguns minutos.")
     return ""
