@@ -313,6 +313,8 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 
 ### 3. REGRAS OBRIGATÓRIAS (SEM EXCEÇÃO):
 
+⚠️ PROIBIÇÃO ABSOLUTA: NÃO CRIE, NÃO DESENHE, NÃO GERE, NÃO INCLUA personagens da Turma da Mônica (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, etc). Eles são MARCA REGISTRADA e RESERVADOS exclusivamente aos posts institucionais da franquia. Qualquer menção a esses personagens nos prompts VIOLA os direitos autorais. Use APENAS: ilustrações didáticas genéricas (flat design, ícones), fotos reais dos alunos da escola, ou elementos abstratos/geométricos.
+
 1. Os prompts de imagem (prompt_en) devem ser em INGLÊS.
 2. TODO texto que aparecer sobreposto na imagem (text_overlay) deve ser em PORTUGUÊS DO BRASIL. Jamais use inglês no texto visível da imagem.
 3. O text_overlay deve ser curto: no máximo 15 palavras, em fonte bold, legível em tela de celular.
@@ -322,6 +324,7 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 7. O elemento de continuidade "Arraste para o lado ➔" deve ser SEMPRE em PORTUGUÊS e na MESMA LINHA do texto principal (sem quebra de linha). NUNCA traduza para inglês. Nos prompts_en, referencie como: "text overlay in Brazilian Portuguese on single line: '[texto do slide]. Arraste para o lado ➔'"
 8. Fotos reais devem ser referenciadas como "authentic school photo" no prompt.
 9. O campo text_overlay de TODOS os slides (exceto slide 8) deve conter o texto do conteúdo + "Arraste para o lado ➔" ao final, TUDO EM UMA ÚNICA LINHA (sem quebra de linha). Exemplo: "Texto do conteúdo aqui. Arraste para o lado ➔"
+10. LEMBRETE FINAL: NÃO use personagens da Turma da Mônica NOS PROMPTS DE IMAGEM. Eles são proibidos. Se o Gemini gerar qualquer referência a Mônica, Cebolinha, Cascão, Magali ou Franjinha, DESCARTE aquele prompt e gere outro sem esses personagens.
 
 ### 4. FORMATO DE SAÍDA:
 
