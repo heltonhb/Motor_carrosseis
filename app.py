@@ -278,7 +278,7 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 - **Logo:** Inserir o logo oficial "Ensina Mais Turma da Mônica" com borda branca destacada no canto superior ou inferior das lâminas institucionais.
 - **Cores Predominantes:** Fundo branco/off-white limpo (#FFFFFF ou #F8FAFC), azul royal/marinho institucional para títulos principais (#1E3A8A), com acentos de destaque em amarelo (#FFD166) e verde (#4ECDC4) (alinhados às cores do logo da marca).
 - **Tipografia:** Sem serifa, moderna, geométrica e de alto contraste (máximo de 35 a 45 palavras por tela para leitura rápida em celular).
-- **Elemento de Continuidade:** Barra de progresso discreta ou setas sutis no rodapé indicando deslizamento para o próximo slide ("Arraste para o lado ➔").
+- **Elemento de Continuidade:** Barra de progresso discreta ou setas sutis no rodapé indicando deslizamento para o próximo slide. TEXTO OBRIGATÓRIO EM PORTUGUÊS: "Arraste para o lado ➔" (NUNCA escreva "Swipe" ou "Slide" — SEMPRE em português).
 - **Ativos Fotográficos Reais:**
   * Imagem de Fachada: Inserir a foto real da fachada da escola (com o portão branco, balões e painel da Turma da Mônica) na lâmina de apresentação do espaço físico.
   * Imagens de Laboratório: Utilizar as fotos autênticas dos alunos (aluna montando o kit de robótica na mesa amarela e aluno concentrado programando no laptop) nas lâminas de metodologia e metodologia prática.
@@ -287,7 +287,7 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 
 #### SLIDE 1: CAPA (Interrupção de Rolagem)
 - **Composição Visual:** Fundo clean, tipografia de grande impacto no terço superior. Ilustração minimalista ou elemento gráfico de destaque. Selo sutil no rodapé com o logo da Ensina Mais Tatuapé.
-- **Elementos:** Título impactante + subtítulo contextual + "Arraste para ver ➔"
+- **Elementos:** Título impactante + subtítulo contextual + "Arraste para o lado ➔" (em português, nunca em inglês)
 
 #### SLIDE 2: A SEGUNDA CAPA (Reapresentação Algorítmica)
 - **Composição Visual:** Caixa de destaque visual azul escuro (#1E3A8A) com texto branco. Deve funcionar como uma segunda capa forte caso o Instagram reapresente este slide no feed.
@@ -295,21 +295,21 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 
 #### SLIDES 3-5: ENTREGA (Valor Didático)
 - **Composição Visual:** Diagramas, esquemas visuais, passo a passo ilustrado. Cores da marca (azul, amarelo, verde).
-- **Elementos:** Conteúdo didático visual + dicas práticas
+- **Elementos:** Conteúdo didático visual + dicas práticas + "Arraste para o lado ➔" (em português)
 
 #### SLIDE 6: PONTE (Humanização com Alunos Reais)
 - **Composição Visual:** Grid elegante com moldura limpa contendo as fotos reais dos alunos da unidade (foto da aluna montando o robô e foto do aluno no computador programando).
-- **Elementos:** Fotos reais + texto sobre metodologia
+- **Elementos:** Fotos reais + texto sobre metodologia + "Arraste para o lado ➔" (em português)
 
 #### SLIDE 7: A ESCOLA REAL NO BAIRRO (Foto da Fachada)
 - **Composição Visual:** Destaque para a fotografia real da Fachada da unidade na Rua Coelho Lisboa (portão branco, comunicação visual da Turma da Mônica e balões comemorativos).
-- **Elementos:** Foto da fachada + informações da unidade
+- **Elementos:** Foto da fachada + informações da unidade + "Arraste para o lado ➔" (em português)
 
 #### SLIDE 8: CTA CONVERSIVO DE LEAD
 - **Composição Visual:** Fundo com tom suave, ícone de salvar em evidência à esquerda e botão de mensagem à direita. Logo oficial no topo.
 - **Elementos:** Chamada para Salvar + Comentar palavra-chave + WhatsApp
 
-### 3. REGRAS OBRIGATÓRIAS:
+### 3. REGRAS OBRIGATÓRIAS (SEM EXCEÇÃO):
 
 1. Os prompts de imagem (prompt_en) devem ser em INGLÊS.
 2. TODO texto que aparecer sobreposto na imagem (text_overlay) deve ser em PORTUGUÊS DO BRASIL. Jamais use inglês no texto visível da imagem.
@@ -317,8 +317,9 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 4. Inclua no prompt_en a instrução: "text overlay in Brazilian Portuguese".
 5. Incluir "Ensina Mais Turma da Mônica" logo reference quando apropriado.
 6. Usar cores: azul royal (#1E3A8A), amarelo (#FFD166), verde (#4ECDC4), branco/off-white.
-7. Incluir elemento de continuidade "Arraste para o lado ➔" nos slides 1-7.
+7. O elemento de continuidade "Arraste para o lado ➔" deve ser SEMPRE em PORTUGUÊS. NUNCA traduza para inglês. Nos prompts_en, referencie como: "text overlay in Brazilian Portuguese: 'Arraste para o lado' with arrow".
 8. Fotos reais devem ser referenciadas como "authentic school photo" no prompt.
+9. O campo text_overlay de TODOS os slides (exceto slide 8) deve conter o texto do conteúdo + "Arraste para o lado ➔" ao final, separado por quebra de linha.
 
 ### 4. FORMATO DE SAÍDA:
 
