@@ -322,7 +322,7 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 5. Incluir "Ensina Mais Turma da Mônica" logo reference quando apropriado.
 6. Usar cores: azul royal (#1E3A8A), amarelo (#FFD166), verde (#4ECDC4), branco/off-white.
 7. O elemento de continuidade "Arraste para o lado ➔" deve ser SEMPRE em PORTUGUÊS e posicionado separadamente no CANTO INFERIOR DIREITO da imagem, em fonte menor e discreta. NÃO coloque junto com o texto principal. Nos prompts_en, referencie como: "small discreet text in bottom right corner saying 'Arraste para o lado ➔' in Brazilian Portuguese"
-8. Fotos reais devem ser referenciadas como "authentic school photo" no prompt.
+8. Fotos reais devem ser referenciadas como "authentic school photo" no prompt. FIDELIDADE ABSOLUTA: quando usar foto da fachada como referência, NÃO distorça, NÃO crie prédios fictícios, NÃO altere a arquitetura original. A imagem gerada deve ser FIEL à foto real — mantenha: portão branco, comunicação visual da Turma da Mônica, balões,_WARNINGS e toda a identidade visual existente. Apenas adicione elementos de texto sobreposto, NÃO recrie o estabelecimento.
 9. O campo text_overlay deve conter APENAS o texto principal do slide (sem "Arraste para o lado"). O "Arraste para o lado ➔" é uma camada separada no canto inferior direito, não faz parte do text_overlay. Exemplo de text_overlay: "A pegadinha que mais derruba notas"
 10. O "Arraste para o lado ➔" é sempre uma camada separada no canto inferior direito, discreta, em fonte menor. NUNCA misture com o texto principal do slide.
 11. LEMBRETE FINAL: NÃO use personagens da Turma da Mônica NOS PROMPTS DE IMAGEM. Eles são proibidos. Se o Gemini gerar qualquer referência a Mônica, Cebolinha, Cascão, Magali ou Franjinha, DESCARTE aquele prompt e gere outro sem esses personagens.
@@ -336,7 +336,7 @@ Para cada slide, retorne:
 - estilo: Estilo visual específico (flat design, isometric, illustration, photo composition, etc.)
 - usa_foto_real: true/false (indica se o slide deve usar foto real da escola)
 - tipo_foto: "fachada" / "laboratorio" / "alunos" / null
-- referencias: Lista de imagens de referência necessárias para este slide. Valores possíveis: "logo" (Ensina Mais Turma da Mônica), "fachada" (foto da fachada da escola), "alunos_robótica" (aluna montando robô), "alunos_programação" (aluno programando), "alunos_apoio" (alunos em aula de reforço de Português ou Matemática), "lab_tecnologia" (laboratório de tecnologia), null (apenas ilustração gerada)
+- referencias: Lista de imagens de referência necessárias para este slide. Valores possíveis: "logo" (Ensina Mais Turma da Mônica), "fachada" (foto da fachada da escola — NÃO distorcer, manter fidelidade ao original), "alunos_robótica" (aluna montando robô), "alunos_programação" (aluno programando), "alunos_apoio" (alunos em aula de reforço de Português ou Matemática), "lab_tecnologia" (laboratório de tecnologia), null (apenas ilustração gerada)
 
 Retorne JSON:
 {
