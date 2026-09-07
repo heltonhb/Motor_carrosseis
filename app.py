@@ -147,14 +147,14 @@ TEMPLATES = {
         "kpi_alvo": "Salvamentos ≥ 4%",
         "cta_padrao": "DESAFIO",
         "estrutura": [
-            {"slide": 1, "tipo": "Capa", "texto": "Enunciado de problema típico cobrado no Ensino Fundamental"},
-            {"slide": 2, "tipo": "Segunda Capa", "texto": "Por que a leitura apressada induz ao raciocínio errado"},
-            {"slide": 3, "tipo": "Entrega", "texto": "Método passo a passo — etapa 1"},
-            {"slide": 4, "tipo": "Entrega", "texto": "Método passo a passo — etapa 2"},
-            {"slide": 5, "tipo": "Entrega", "texto": "Método passo a passo — etapa 3"},
-            {"slide": 6, "tipo": "Ponte", "texto": "Como o ensino individualizado resolve a lacuna"},
-            {"slide": 7, "tipo": "Prova", "texto": "Foto real do laboratório ou aluno na unidade"},
-            {"slide": 8, "tipo": "CTA", "texto": "Salve + Comente DESAFIO para receber lista no Direct"},
+            {"slide": 1, "tipo": "Capa", "texto": "Enunciado de problema típico cobrado no Ensino Fundamental", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 2, "tipo": "Segunda Capa", "texto": "Por que a leitura apressada induz ao raciocínio errado", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 3, "tipo": "Entrega", "texto": "Método passo a passo — etapa 1", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 4, "tipo": "Entrega", "texto": "Método passo a passo — etapa 2", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 5, "tipo": "Entrega", "texto": "Método passo a passo — etapa 3", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 6, "tipo": "Ponte", "texto": "Como o ensino individualizado resolve a lacuna", "usa_foto_real": True, "tipo_foto": "alunos"},
+            {"slide": 7, "tipo": "Prova", "texto": "Foto real da fachada — Rua Coelho Lisboa, 783", "usa_foto_real": True, "tipo_foto": "fachada"},
+            {"slide": 8, "tipo": "CTA", "texto": "Salve + Comente DESAFIO para receber lista no Direct", "usa_foto_real": False, "tipo_foto": None},
         ],
     },
     "alivio_pressao": {
@@ -165,14 +165,14 @@ TEMPLATES = {
         "kpi_alvo": "Envios DM ≥ 2,5%",
         "cta_padrao": "FOCO",
         "estrutura": [
-            {"slide": 1, "tipo": "Capa", "texto": "A rotina de cobrança e o peso das notas"},
-            {"slide": 2, "tipo": "Segunda Capa", "texto": "O que acontece neurologicamente com a ansiedade"},
-            {"slide": 3, "tipo": "Entrega", "texto": "Atitude prática 1 dos pais em casa"},
-            {"slide": 4, "tipo": "Entrega", "texto": "Atitude prática 2 dos pais em casa"},
-            {"slide": 5, "tipo": "Entrega", "texto": "Atitude prática 3 dos pais em casa"},
-            {"slide": 6, "tipo": "Ponte", "texto": "Diferença entre estudo passivo e ativo"},
-            {"slide": 7, "tipo": "Prova", "texto": "Ambiente acolhedor da unidade"},
-            {"slide": 8, "tipo": "CTA", "texto": "Envie para um pai/mãe do colégio + WhatsApp link bio"},
+            {"slide": 1, "tipo": "Capa", "texto": "A rotina de cobrança e o peso das notas", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 2, "tipo": "Segunda Capa", "texto": "O que acontece neurologicamente com a ansiedade", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 3, "tipo": "Entrega", "texto": "Atitude prática 1 dos pais em casa", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 4, "tipo": "Entrega", "texto": "Atitude prática 2 dos pais em casa", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 5, "tipo": "Entrega", "texto": "Atitude prática 3 dos pais em casa", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 6, "tipo": "Ponte", "texto": "Diferença entre estudo passivo e ativo", "usa_foto_real": True, "tipo_foto": "alunos"},
+            {"slide": 7, "tipo": "Prova", "texto": "Foto real da fachada — portão branco, Turma da Mônica", "usa_foto_real": True, "tipo_foto": "fachada"},
+            {"slide": 8, "tipo": "CTA", "texto": "Envie para um pai/mãe do colégio + WhatsApp link bio", "usa_foto_real": False, "tipo_foto": None},
         ],
     },
     "conversao_diagnostica": {
@@ -183,14 +183,14 @@ TEMPLATES = {
         "kpi_alvo": "Leads WhatsApp 15-25/semana",
         "cta_padrao": "AULA",
         "estrutura": [
-            {"slide": 1, "tipo": "Capa", "texto": "O dilema tempo de tela vs. futuro acadêmico"},
-            {"slide": 2, "tipo": "Segunda Capa", "texto": "Consumo passivo vs. criação ativa"},
-            {"slide": 3, "tipo": "Entrega", "texto": "Como programação melhora concentração"},
-            {"slide": 4, "tipo": "Entrega", "texto": "Benefícios da lógica para raciocínio matemático"},
-            {"slide": 5, "tipo": "Entrega", "texto": "Atividades práticas do laboratório"},
-            {"slide": 6, "tipo": "Ponte", "texto": "Depoimento ou registro do laboratório"},
-            {"slide": 7, "tipo": "Prova", "texto": "Oferta de aula experimental gratuita"},
-            {"slide": 8, "tipo": "CTA", "texto": "Comente AULA para receber convite no Direct"},
+            {"slide": 1, "tipo": "Capa", "texto": "O dilema tempo de tela vs. futuro acadêmico", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 2, "tipo": "Segunda Capa", "texto": "Consumo passivo vs. criação ativa", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 3, "tipo": "Entrega", "texto": "Como programação melhora concentração", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 4, "tipo": "Entrega", "texto": "Benefícios da lógica para raciocínio matemático", "usa_foto_real": False, "tipo_foto": None},
+            {"slide": 5, "tipo": "Entrega", "texto": "Atividades práticas do laboratório", "usa_foto_real": True, "tipo_foto": "laboratorio"},
+            {"slide": 6, "tipo": "Ponte", "texto": "Depoimento ou registro do laboratório", "usa_foto_real": True, "tipo_foto": "laboratorio"},
+            {"slide": 7, "tipo": "Prova", "texto": "Foto real da fachada — Unidade Tatuapé", "usa_foto_real": True, "tipo_foto": "fachada"},
+            {"slide": 8, "tipo": "CTA", "texto": "Comente AULA para receber convite no Direct", "usa_foto_real": False, "tipo_foto": None},
         ],
     },
 }
@@ -267,25 +267,68 @@ Retorne um JSON válido:
 
 Formato: 30-50 palavras por slide. Tom empático, didático, autêntico. Inclua referências locais (escolas, bairro)."""
 
-PROMPT_PROMPTS_IMAGEM = """Você é um especialista em prompts para geração de imagens com IA (Google ImageFX, Midjourney, DALL-E).
+PROMPT_PROMPTS_IMAGEM = """Você é um Diretor de Arte e Designer Especialista em Carrosséis de Alta Retenção e Conversão para o Instagram (@ensinamais.tatuape).
 
-Para cada slide do carrossel abaixo, gere um PROMPT DETALHADO em inglês para gerar a imagem correspondente.
+Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, formato vertical (1080 x 1350 px, proporção 4:5), combinando design gráfico limpo, didática prática e fotografias reais da escola.
 
-REGRAS OBRIGATÓRIAS:
+---
+
+### 1. DIRETRIZES DE IDENTIDADE VISUAL E ATIVOS FORNECIDOS:
+
+- **Logo:** Inserir o logo oficial "Ensina Mais Turma da Mônica" com borda branca destacada no canto superior ou inferior das lâminas institucionais.
+- **Cores Predominantes:** Fundo branco/off-white limpo (#FFFFFF ou #F8FAFC), azul royal/marinho institucional para títulos principais (#1E3A8A), com acentos de destaque em amarelo (#FFD166) e verde (#4ECDC4) (alinhados às cores do logo da marca).
+- **Tipografia:** Sem serifa, moderna, geométrica e de alto contraste (máximo de 35 a 45 palavras por tela para leitura rápida em celular).
+- **Elemento de Continuidade:** Barra de progresso discreta ou setas sutis no rodapé indicando deslizamento para o próximo slide ("Arraste para o lado ➔").
+- **Ativos Fotográficos Reais:**
+  * Imagem de Fachada: Inserir a foto real da fachada da escola (com o portão branco, balões e painel da Turma da Mônica) na lâmina de apresentação do espaço físico.
+  * Imagens de Laboratório: Utilizar as fotos autênticas dos alunos (aluna montando o kit de robótica na mesa amarela e aluno concentrado programando no laptop) nas lâminas de metodologia e metodologia prática.
+
+### 2. ESTRUTURA VISUAL POR TIPO DE SLIDE:
+
+#### SLIDE 1: CAPA (Interrupção de Rolagem)
+- **Composição Visual:** Fundo clean, tipografia de grande impacto no terço superior. Ilustração minimalista ou elemento gráfico de destaque. Selo sutil no rodapé com o logo da Ensina Mais Tatuapé.
+- **Elementos:** Título impactante + subtítulo contextual + "Arraste para ver ➔"
+
+#### SLIDE 2: A SEGUNDA CAPA (Reapresentação Algorítmica)
+- **Composição Visual:** Caixa de destaque visual azul escuro (#1E3A8A) com texto branco. Deve funcionar como uma segunda capa forte caso o Instagram reapresente este slide no feed.
+- **Elementos:** Título de destaque + texto explicativo curto
+
+#### SLIDES 3-5: ENTREGA (Valor Didático)
+- **Composição Visual:** Diagramas, esquemas visuais, passo a passo ilustrado. Cores da marca (azul, amarelo, verde).
+- **Elementos:** Conteúdo didático visual + dicas práticas
+
+#### SLIDE 6: PONTE (Humanização com Alunos Reais)
+- **Composição Visual:** Grid elegante com moldura limpa contendo as fotos reais dos alunos da unidade (foto da aluna montando o robô e foto do aluno no computador programando).
+- **Elementos:** Fotos reais + texto sobre metodologia
+
+#### SLIDE 7: A ESCOLA REAL NO BAIRRO (Foto da Fachada)
+- **Composição Visual:** Destaque para a fotografia real da Fachada da unidade na Rua Coelho Lisboa (portão branco, comunicação visual da Turma da Mônica e balões comemorativos).
+- **Elementos:** Foto da fachada + informações da unidade
+
+#### SLIDE 8: CTA CONVERSIVO DE LEAD
+- **Composição Visual:** Fundo com tom suave, ícone de salvar em evidência à esquerda e botão de mensagem à direita. Logo oficial no topo.
+- **Elementos:** Chamada para Salvar + Comentar palavra-chave + WhatsApp
+
+### 3. REGRAS OBRIGATÓRIAS:
+
 1. Os prompts de imagem (prompt_en) devem ser em INGLÊS.
 2. TODO texto que aparecer sobreposto na imagem (text_overlay) deve ser em PORTUGUÊS DO BRASIL. Jamais use inglês no texto visível da imagem.
 3. O text_overlay deve ser curto: no máximo 15 palavras, em fonte bold, legível em tela de celular.
 4. Inclua no prompt_en a instrução: "text overlay in Brazilian Portuguese".
+5. Incluir "Ensina Mais Turma da Mônica" logo reference quando apropriado.
+6. Usar cores: azul royal (#1E3A8A), amarelo (#FFD166), verde (#4ECDC4), branco/off-white.
+7. Incluir elemento de continuidade "Arraste para o lado ➔" nos slides 1-7.
+8. Fotos reais devem ser referenciadas como "authentic school photo" no prompt.
 
-Estilo visual: Moderno, clean, fundo claro, tipografia bold, cores da marca Ensina Mais (azul escuro + branco + detalhes em vermelho).
-Formato: 1080x1350px (4:5 vertical).
-Elementos: Ilustrações didáticas minimalistas, ícones educacionais, sem fotos de stock genéricas.
+### 4. FORMATO DE SAÍDA:
 
 Para cada slide, retorne:
-- prompt_en: Prompt em inglês para o gerador de imagens (inclua "text overlay in Brazilian Portuguese")
+- prompt_en: Prompt em inglês para o gerador de imagens (inclua "text overlay in Brazilian Portuguese" e referência ao logo quando apropriado)
 - prompt_pt: Descrição em português do que a imagem deve mostrar
 - text_overlay: Texto sobreposto em PORTUGUÊS DO BRASIL (10-15 palavras no máximo, bold, legível)
-- estilo: Estilo visual específico (flat design, isometric, illustration, etc.)
+- estilo: Estilo visual específico (flat design, isometric, illustration, photo composition, etc.)
+- usa_foto_real: true/false (indica se o slide deve usar foto real da escola)
+- tipo_foto: "fachada" / "laboratorio" / "alunos" / null
 
 Retorne JSON:
 {
@@ -295,17 +338,19 @@ Retorne JSON:
       "prompt_en": "...",
       "prompt_pt": "...",
       "text_overlay": "...",
-      "estilo": "..."
+      "estilo": "...",
+      "usa_foto_real": false,
+      "tipo_foto": null
     }
   ],
   "paleta_cores": {
-    "primaria": "#1B2A4A",
-    "secundaria": "#E63946",
-    "fundo": "#F8F9FA",
+    "primaria": "#1E3A8A",
+    "secundaria": "#4ECDC4",
+    "fundo": "#F8FAFC",
     "texto": "#2D2D2D",
     "destaque": "#FFD166"
   },
-  "dicas_gerais": "Dicas para usar nos geradores de imagem"
+  "dicas_gerais": "Dicas para usar nos geradores de imagem e composição com fotos reais"
 }"""
 
 PROMPT_CRONOGRAMA = """Você é o social media manager da Ensina Mais Tatuapé.
