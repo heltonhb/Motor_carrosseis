@@ -306,15 +306,15 @@ st.markdown(f"""
 flow_progress()
 
 # ─── Tabs principais ──────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Tendências",
     "💡 Ideias",
+    "🔬 NotebookLM",
     "🎨 Prompts Google Flow",
     "🖼️ Gerador de Imagens",
     "📝 Legendas",
     "📅 Cronograma & Métricas",
     "📦 Lote",
-    "🔬 NotebookLM",
 ])
 
 
@@ -1184,12 +1184,58 @@ with tab8:
                 # Exibir ideias
                 if "ideias" in data:
                     st.markdown("### 💡 Ideias Geradas")
+                    
+                    # Botão para enviar todas as ideias para o gerador de prompts
+                    if st.button("📤 Enviar ideias para Gerador de Prompts", type="primary", use_container_width=True):
+                        # Formatar ideias no formato esperado pelo PROMPT_PROMPTS_IMAGEM
+                        ideias_formatadas = []
+                        for ideia in data["ideias"]:
+                            ideia_formatada = {
+                                "titulo": ideia.get("titulo", ""),
+                                "eixo": ideia.get("eixo", "Didático"),
+                                "tema": ideia.get("tema", ""),
+                                "publico_alvo": ideia.get("publico_alvo", "Pais de classes A/B do Tatuapé"),
+                                "palavras_chave_seo": ["apoio escolar Tatuapé", "reforço escolar Tatuapé"],
+                                "cta": ideia.get("cta", "DESAFIO"),
+                                "slides_sugeridos": ideia.get("slides_sugeridos", []),
+                                "kpi_alvo": ideia.get("kpi_alvo", "Salvamentos/Envios/Leads"),
+                                "justificativa": ideia.get("justificativa", ideia.get("fonte_notebook", "")),
+                                "fonte_notebook": ideia.get("fonte_notebook", ""),
+                            }
+                            ideias_formatadas.append(ideia_formatada)
+                        
+                        # Salvar no session_state para usar na aba de prompts
+                        st.session_state["ideias_selecionadas"] = ideias_formatadas
+                        st.session_state["nb_ideias_para_prompts"] = True
+                        st.success(f"✅ {len(ideias_formatadas)} ideias enviadas! Vá para a aba '🎨 Prompts Google Flow'")
+                    
+                    # Exibir cada ideia
                     for i, ideia in enumerate(data["ideias"]):
                         with st.expander(f"{'🔴' if i==0 else '🟡' if i==1 else '🟢'} {ideia.get('titulo', '')}"):
                             st.markdown(f"**Eixo:** {ideia.get('eixo', '')}")
                             st.markdown(f"**Tema:** {ideia.get('tema', '')}")
+                            st.markdown(f"**Público:** {ideia.get('publico_alvo', 'Pais de classes A/B do Tatuapé')}")
                             st.markdown(f"**CTA:** `{ideia.get('cta', '')}`")
                             st.markdown(f"**Fonte Notebook:** {ideia.get('fonte_notebook', '')}")
+                            
+                            # Botão para enviar ideia individual
+                            if st.button(f"📤 Enviar para Prompts", key=f"send_idea_{i}"):
+                                ideia_formatada = {
+                                    "titulo": ideia.get("titulo", ""),
+                                    "eixo": ideia.get("eixo", "Didático"),
+                                    "tema": ideia.get("tema", ""),
+                                    "publico_alvo": ideia.get("publico_alvo", "Pais de classes A/B do Tatuapé"),
+                                    "palavras_chave_seo": ["apoio escolar Tatuapé", "reforço escolar Tatuapé"],
+                                    "cta": ideia.get("cta", "DESAFIO"),
+                                    "slides_sugeridos": ideia.get("slides_sugeridos", []),
+                                    "kpi_alvo": ideia.get("kpi_alvo", "Salvamentos/Envios/Leads"),
+                                    "justificativa": ideia.get("justificativa", ideia.get("fonte_notebook", "")),
+                                    "fonte_notebook": ideia.get("fonte_notebook", ""),
+                                }
+                                if "ideias_selecionadas" not in st.session_state:
+                                    st.session_state["ideias_selecionadas"] = []
+                                st.session_state["ideias_selecionadas"].append(ideia_formatada)
+                                st.success(f"✅ '{ideia.get('titulo', '')}' enviada para Prompts!")
                 
                 # Exibir análise de concorrência
                 if "concorrentes" in data:
