@@ -135,25 +135,11 @@ def _api_key_ok() -> bool:
 
 def clipboard_button(text: str, label: str, key: str) -> None:
     """
-    Botão que copia `text` para a área de transferência via JavaScript.
-    Usa st.components.v1.html para injetar navigator.clipboard.writeText().
+    Botão que exibe o texto para copiar manualmente.
     """
-    safe = text.replace("`", "\\`").replace("\\", "\\\\")
-    components.html(
-        f"""
-        <button onclick="navigator.clipboard.writeText(`{safe}`).then(()=>{{
-            this.innerText='✅ Copiado!';
-            setTimeout(()=>this.innerText='{label}',2000);
-        }})" style="
-            background:#e63946; color:white; border:none; border-radius:8px;
-            padding:8px 18px; font-size:14px; font-weight:600; cursor:pointer;
-            width:100%; margin-top:4px;">
-            {label}
-        </button>
-        """,
-        height=48,
-        key=key,
-    )
+    if st.button(label, key=key, use_container_width=True):
+        st.code(text, language=None)
+        st.success("Copie o texto acima!")
 
 
 def flow_progress() -> None:
