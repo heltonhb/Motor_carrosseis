@@ -332,7 +332,7 @@ Para cada slide, retorne:
 - estilo: Estilo visual específico (flat design, isometric, illustration, photo composition, etc.)
 - usa_foto_real: true/false (indica se o slide deve usar foto real da escola)
 - tipo_foto: "fachada" / "laboratorio" / "alunos" / null
-- referencias: Lista de imagens de referência necessárias para este slide. Valores possíveis: "logo" (Ensina Mais Turma da Mônica), "fachada" (foto da fachada da escola), "alunos_robótica" (aluna montando robô), "alunos_programação" (aluno programando), "lab_tecnologia" (laboratório de tecnologia), null (apenas ilustração gerada)
+- referencias: Lista de imagens de referência necessárias para este slide. Valores possíveis: "logo" (Ensina Mais Turma da Mônica), "fachada" (foto da fachada da escola), "alunos_robótica" (aluna montando robô), "alunos_programação" (aluno programando), "alunos_apoio" (alunos em aula de reforço de Português ou Matemática), "lab_tecnologia" (laboratório de tecnologia), null (apenas ilustração gerada)
 
 Retorne JSON:
 {
@@ -1017,6 +1017,7 @@ with tab3:
                             "fachada": "🏢 Foto da Fachada (Rua Coelho Lisboa, 783)",
                             "alunos_robótica": "🤖 Foto: Aluna montando robô na mesa amarela",
                             "alunos_programação": "💻 Foto: Aluno programando no laptop",
+                            "alunos_apoio": "📚 Foto: Alunos em aula de reforço (Português/Matemática)",
                             "lab_tecnologia": "🔬 Foto: Laboratório de Tecnologia"
                         }
                         refs_text = " | ".join([ref_labels.get(r, r) for r in referencias])
