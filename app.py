@@ -265,7 +265,9 @@ Retorne um JSON válido:
   ]
 }
 
-Formato: 30-50 palavras por slide. Tom empático, didático, autêntico. Inclua referências locais (escolas, bairro)."""
+Formato: 30-50 palavras por slide. Tom empático, didático, autêntico. Inclua referências locais (escolas, bairro).
+
+IMPORTANTE: NÃO use personagens da Turma da Mônica (Mônica, Cebolinha, Cascão, Magali, Franjinha, etc). Eles são RESERVADOS aos posts institucionais da franquia. Fique longe desses personagens nas ideias e nos slides."""
 
 PROMPT_PROMPTS_IMAGEM = """Você é um Diretor de Arte e Designer Especialista em Carrosséis de Alta Retenção e Conversão para o Instagram (@ensinamais.tatuape).
 
@@ -443,7 +445,9 @@ Retorne JSON:
     }
   ],
   "dicas_uso": "Dicas de como usar cada opção"
-}"""
+}
+
+IMPORTANTE: NÃO use personagens da Turma da Mônica (Mônica, Cebolinha, Cascão, Magali, Franjinha, etc) nas legendas. Eles são RESERVADOS aos posts institucionais da franquia."""
 
 
 # ─── Funções auxiliares ──────────────────────────────────────────────────────
