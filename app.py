@@ -1091,32 +1091,19 @@ with tab8:
     if not authenticated:
         st.error("❌ NotebookLM não autenticado. Execute: `notebooklm login`")
     else:
-        # Filtrar notebooks relevantes para Ensina Mais
-        relevant_keywords = ["ensina", "tatuapé", "educação", "escola", "reforço", "carrossel"]
-        relevant_notebooks = []
+        # Notebook fixo para Ensina Mais Tatuapé
+        NOTEBOOK_ID_FIXO = "7f415de3-0f02-4eb9-b5f1-3d104a00354a"
+        NOTEBOOK_TITULO = "Estratégia de Engajamento e Crescimento: Ensina Mais Tatuapé"
         
-        for nb in notebooks:
-            title = nb.get("title", "").lower()
-            if any(kw in title for kw in relevant_keywords):
-                relevant_notebooks.append(nb)
-
-        if not relevant_notebooks:
-            relevant_notebooks = notebooks[:10]  # Mostrar últimos 10 se nenhum relevante
-
-        # Sidebar com notebooks
+        selected_nb_id = NOTEBOOK_ID_FIXO
+        
+        # Sidebar com info do notebook
         with st.sidebar:
             st.markdown("---")
             st.markdown("## 🔬 NotebookLM")
-            st.markdown(f"**Notebooks relevantes:** {len(relevant_notebooks)}")
-            
-            # Selecionar notebook
-            nb_options = {nb.get("title", "Sem título"): nb.get("id") for nb in relevant_notebooks}
-            selected_nb_title = st.selectbox(
-                "Selecionar notebook:",
-                list(nb_options.keys()),
-                key="nb_select"
-            )
-            selected_nb_id = nb_options.get(selected_nb_title)
+            st.markdown(f"**Notebook ativo:**")
+            st.info(f"📚 {NOTEBOOK_TITULO}")
+            st.caption(f"ID: {selected_nb_id[:12]}...")
 
         # Opções de consulta
         st.markdown("### 🔍 Tipo de Consulta")
