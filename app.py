@@ -1149,7 +1149,11 @@ with tab8:
         if "nb_result" in st.session_state and st.session_state["nb_result"]:
             result = st.session_state["nb_result"]
             
-            # Tentar parsear como JSON
+            # Exibir resposta do NotebookLM em Markdown
+            st.markdown("### 📄 Resposta do NotebookLM")
+            st.markdown(result)
+            
+            # Tentar parsear como JSON (fallback)
             try:
                 data = json.loads(result)
                 
