@@ -30,6 +30,7 @@ from prompts import (
     get_prompt_cronograma,
 )
 from templates import TEMPLATES, MetricaPost, eixo_para_template
+import notebooklm_client as nlm
 
 # ─── Configuração da página ───────────────────────────────────────────────────
 st.set_page_config(
@@ -305,7 +306,7 @@ st.markdown(f"""
 flow_progress()
 
 # ─── Tabs principais ──────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📈 Tendências",
     "💡 Ideias",
     "🎨 Prompts Google Flow",
@@ -313,6 +314,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📝 Legendas",
     "📅 Cronograma & Métricas",
     "📦 Lote",
+    "🔬 NotebookLM",
 ])
 
 
@@ -1069,3 +1071,167 @@ with tab7:
                     mime="application/zip",
                     use_container_width=True,
                 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 8: NOTEBOOKLM
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab8:
+    st.markdown("## 🔬 NotebookLM — Motor de Tendências e Ideias")
+    st.markdown("Consulte notebooks existentes no NotebookLM para buscar tendências e gerar ideias baseadas em fontes reais.")
+
+    # Verificar autenticação
+    try:
+        notebooks = nlm.list_notebooks()
+        authenticated = True
+    except Exception:
+        notebooks = []
+        authenticated = False
+
+    if not authenticated:
+        st.error("❌ NotebookLM não autenticado. Execute: `notebooklm login`")
+    else:
+        # Filtrar notebooks relevantes para Ensina Mais
+        relevant_keywords = ["ensina", "tatuapé", "educação", "escola", "reforço", "carrossel"]
+        relevant_notebooks = []
+        
+        for nb in notebooks:
+            title = nb.get("title", "").lower()
+            if any(kw in title for kw in relevant_keywords):
+                relevant_notebooks.append(nb)
+
+        if not relevant_notebooks:
+            relevant_notebooks = notebooks[:10]  # Mostrar últimos 10 se nenhum relevante
+
+        # Sidebar com notebooks
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("## 🔬 NotebookLM")
+            st.markdown(f"**Notebooks relevantes:** {len(relevant_notebooks)}")
+            
+            # Selecionar notebook
+            nb_options = {nb.get("title", "Sem título"): nb.get("id") for nb in relevant_notebooks}
+            selected_nb_title = st.selectbox(
+                "Selecionar notebook:",
+                list(nb_options.keys()),
+                key="nb_select"
+            )
+            selected_nb_id = nb_options.get(selected_nb_title)
+
+        # Opções de consulta
+        st.markdown("### 🔍 Tipo de Consulta")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            consulta_tipo = st.radio(
+                "O que deseja buscar:",
+                ["📈 Tendências do Setor", "💡 Ideias de Carrossel", "🏢 Análise de Concorrência", "❓ Pergunta Livre"],
+                key="nb_consulta_tipo"
+            )
+        
+        with col2:
+            if consulta_tipo == "❓ Pergunta Livre":
+                pergunta_livre = st.text_area(
+                    "Digite sua pergunta:",
+                    placeholder="Ex: Quais são as maiores dúvidas de pais sobre frações?",
+                    key="nb_pergunta_livre"
+                )
+
+        # Botão de busca
+        if st.button("🔍 Buscar no NotebookLM", type="primary", use_container_width=True):
+            if not selected_nb_id:
+                st.warning("⚠️ Selecione um notebook primeiro.")
+            else:
+                with st.spinner("🤖 Consultando NotebookLM..."):
+                    if consulta_tipo == "📈 Tendências do Setor":
+                        result = nlm.get_trends(selected_nb_id)
+                    elif consulta_tipo == "💡 Ideias de Carrossel":
+                        result = nlm.generate_ideas(selected_nb_id)
+                    elif consulta_tipo == "🏢 Análise de Concorrência":
+                        result = nlm.get_competitor_analysis(selected_nb_id)
+                    else:
+                        result = nlm.search_in_notebook(selected_nb_id, pergunta_livre)
+                    
+                    if result:
+                        st.session_state["nb_result"] = result
+                        st.success("✅ Consulta concluída!")
+                    else:
+                        st.error("❌ Não foi possível obter resposta do notebook.")
+
+        # Exibir resultado
+        if "nb_result" in st.session_state and st.session_state["nb_result"]:
+            result = st.session_state["nb_result"]
+            
+            # Tentar parsear como JSON
+            try:
+                data = json.loads(result)
+                
+                # Exibir tendências
+                if "tendencias" in data:
+                    st.markdown("### 📈 Tendências Identificadas")
+                    for t in data["tendencias"]:
+                        potencial = t.get("potencial", "médio")
+                        cor = "#4ECDC4" if potencial == "alto" else "#FFD166" if potencial == "médio" else "#888"
+                        st.markdown(f"""
+                        <div class="metric-box">
+                            <strong style="color:{cor};">{t.get('nome', '')}</strong>
+                            <span style="color:#888; font-size:0.85em;">[{potencial}]</span>
+                            <br><span style="color:#ccc;">{t.get('descricao', '')}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                # Exibir dores dos pais
+                if "dores_pais" in data:
+                    st.markdown("### 😰 Dores dos Pais")
+                    for d in data["dores_pais"]:
+                        with st.expander(f"💔 {d.get('dor', '')}"):
+                            st.markdown(f"**Frequência:** {d.get('frequencia', '')}")
+                            st.markdown(f"**Oportunidade:** {d.get('oportunidade', '')}")
+                
+                # Exibir oportunidades
+                if "oportunidades" in data:
+                    st.markdown("### 🎯 Oportunidades")
+                    for o in data["oportunidades"]:
+                        st.success(f"**{o.get('oportunidade', '')}** → {o.get('acao_sugerida', '')}")
+                
+                # Exibir ideias
+                if "ideias" in data:
+                    st.markdown("### 💡 Ideias Geradas")
+                    for i, ideia in enumerate(data["ideias"]):
+                        with st.expander(f"{'🔴' if i==0 else '🟡' if i==1 else '🟢'} {ideia.get('titulo', '')}"):
+                            st.markdown(f"**Eixo:** {ideia.get('eixo', '')}")
+                            st.markdown(f"**Tema:** {ideia.get('tema', '')}")
+                            st.markdown(f"**CTA:** `{ideia.get('cta', '')}`")
+                            st.markdown(f"**Fonte Notebook:** {ideia.get('fonte_notebook', '')}")
+                
+                # Exibir análise de concorrência
+                if "concorrentes" in data:
+                    st.markdown("### 🏢 Análise de Concorrência")
+                    for c in data["concorrentes"]:
+                        with st.expander(f"🏫 {c.get('nome', '')}"):
+                            st.markdown(f"**O que faz:** {c.get('o_que_faz', '')}")
+                            st.markdown(f"**Pontos fortes:** {c.get('pontos_fortes', '')}")
+                            st.markdown(f"**Pontos fracos:** {c.get('pontos_fracos', '')}")
+                
+                # Exibir dados relevantes
+                if "dados_relevantes" in data:
+                    st.markdown("### 📊 Dados Relevantes")
+                    for d in data["dados_relevantes"]:
+                        st.info(f"**{d.get('dado', '')}**\nFonte: {d.get('fonte', '')}")
+                
+            except json.JSONDecodeError:
+                # Exibir como texto
+                st.markdown("### 📄 Resposta do NotebookLM")
+                st.markdown(result)
+            
+            # Botão para usar no app
+            st.markdown("---")
+            if st.button("📋 Usar resultado no app", use_container_width=True):
+                st.session_state["nb_result_to_use"] = result
+                st.success("✅ Resultado salvo! Vá para a aba 'Tendências' ou 'Ideias' para usar.")
+
+        # Link direto para o notebook
+        if selected_nb_id:
+            st.markdown("---")
+            st.markdown(f"### 🔗 Link direto para o notebook")
+            st.markdown(f"[Abrir no NotebookLM](https://notebooklm.google.com/notebook/{selected_nb_id})")
