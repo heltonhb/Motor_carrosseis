@@ -332,6 +332,7 @@ Para cada slide, retorne:
 - estilo: Estilo visual específico (flat design, isometric, illustration, photo composition, etc.)
 - usa_foto_real: true/false (indica se o slide deve usar foto real da escola)
 - tipo_foto: "fachada" / "laboratorio" / "alunos" / null
+- referencias: Lista de imagens de referência necessárias para este slide. Valores possíveis: "logo" (Ensina Mais Turma da Mônica), "fachada" (foto da fachada da escola), "alunos_robótica" (aluna montando robô), "alunos_programação" (aluno programando), "lab_tecnologia" (laboratório de tecnologia), null (apenas ilustração gerada)
 
 Retorne JSON:
 {
@@ -343,7 +344,8 @@ Retorne JSON:
       "text_overlay": "...",
       "estilo": "...",
       "usa_foto_real": false,
-      "tipo_foto": null
+      "tipo_foto": null,
+      "referencias": ["logo", "fachada"]
     }
   ],
   "paleta_cores": {
@@ -1006,6 +1008,21 @@ with tab3:
                         st.markdown(slide.get("prompt_pt", ""))
 
                     st.markdown(f"**📝 Texto sobreposto:** `{slide.get('text_overlay', '')}`")
+
+                    # Referências de imagens
+                    referencias = slide.get("referencias", [])
+                    if referencias:
+                        ref_labels = {
+                            "logo": "🏷️ Logo Ensina Mais Turma da Mônica",
+                            "fachada": "🏢 Foto da Fachada (Rua Coelho Lisboa, 783)",
+                            "alunos_robótica": "🤖 Foto: Aluna montando robô na mesa amarela",
+                            "alunos_programação": "💻 Foto: Aluno programando no laptop",
+                            "lab_tecnologia": "🔬 Foto: Laboratório de Tecnologia"
+                        }
+                        refs_text = " | ".join([ref_labels.get(r, r) for r in referencias])
+                        st.markdown(f"**📎 Referências:** {refs_text}")
+                    else:
+                        st.markdown("**📎 Referências:** Apenas ilustração gerada (sem foto real)")
 
                     # Botão de copiar prompt
                     if st.button(f"📋 Copiar prompt Slide {slide.get('slide_num', '?')}", key=f"copy_{slide.get('slide_num', 0)}"):
