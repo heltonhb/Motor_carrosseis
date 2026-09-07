@@ -319,9 +319,9 @@ Crie a estrutura visual e os layouts para um carrossel educativo de 8 lâminas, 
 4. Inclua no prompt_en a instrução: "text overlay in Brazilian Portuguese".
 5. Incluir "Ensina Mais Turma da Mônica" logo reference quando apropriado.
 6. Usar cores: azul royal (#1E3A8A), amarelo (#FFD166), verde (#4ECDC4), branco/off-white.
-7. O elemento de continuidade "Arraste para o lado ➔" deve ser SEMPRE em PORTUGUÊS. NUNCA traduza para inglês. Nos prompts_en, referencie como: "text overlay in Brazilian Portuguese: 'Arraste para o lado' with arrow".
+7. O elemento de continuidade "Arraste para o lado ➔" deve ser SEMPRE em PORTUGUÊS e na MESMA LINHA do texto principal (sem quebra de linha). NUNCA traduza para inglês. Nos prompts_en, referencie como: "text overlay in Brazilian Portuguese on single line: '[texto do slide]. Arraste para o lado ➔'"
 8. Fotos reais devem ser referenciadas como "authentic school photo" no prompt.
-9. O campo text_overlay de TODOS os slides (exceto slide 8) deve conter o texto do conteúdo + "Arraste para o lado ➔" ao final, separado por quebra de linha.
+9. O campo text_overlay de TODOS os slides (exceto slide 8) deve conter o texto do conteúdo + "Arraste para o lado ➔" ao final, TUDO EM UMA ÚNICA LINHA (sem quebra de linha). Exemplo: "Texto do conteúdo aqui. Arraste para o lado ➔"
 
 ### 4. FORMATO DE SAÍDA:
 
