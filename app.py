@@ -446,19 +446,30 @@ with tab2:
             # Estratégia 1: Extrair JSON do bloco de código ```json ... ```
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', nb_result, re.DOTALL)
             if json_match:
+                json_str = json_match.group(1)
+                # Corrigir quebras de linha dentro de strings
+                json_str = re.sub(r'(?<!\\n)(?=\n\s*")', ' ', json_str)
+                json_str = re.sub(r'(?<=[^\\])(\n)(?!\s*")', ' ', json_str)
+                # Remover quebras de linha restantes
+                json_str = json_str.replace('\n', ' ')
                 try:
-                    data = json.loads(json_match.group(1))
+                    data = json.loads(json_str)
                     if "ideias" in data:
                         ideias_formatadas = data["ideias"]
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
                     pass
             
             # Estratégia 2: Extrair JSON direto do texto
             if not ideias_formatadas:
                 json_match = re.search(r'(\{\s*"ideias"\s*:\s*\[.*?\]\s*\})', nb_result, re.DOTALL)
                 if json_match:
+                    json_str = json_match.group(1)
+                    # Corrigir quebras de linha dentro de strings
+                    json_str = re.sub(r'(?<!\\n)(?=\n\s*")', ' ', json_str)
+                    json_str = re.sub(r'(?<=[^\\])(\n)(?!\s*")', ' ', json_str)
+                    json_str = json_str.replace('\n', ' ')
                     try:
-                        data = json.loads(json_match.group(1))
+                        data = json.loads(json_str)
                         if "ideias" in data:
                             ideias_formatadas = data["ideias"]
                     except json.JSONDecodeError:
