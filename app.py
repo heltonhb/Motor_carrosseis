@@ -443,10 +443,13 @@ with tab2:
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
-                ctx = st.session_state.get(
-                    "tendencias_texto",
-                    "Sem dados de tendências. Gere ideias gerais para Tatuapé, SP.",
-                )
+                # Verificar se há contexto do NotebookLM
+                ctx = st.session_state.get("nb_contexto_para_ideias", "")
+                if not ctx:
+                    ctx = st.session_state.get(
+                        "tendencias_texto",
+                        "Sem dados de tendências. Gere ideias gerais para Tatuapé, SP.",
+                    )
                 with st.spinner("🤖 Gerando 6 ideias estratégicas…"):
                     raw = call_gemini(PROMPT_IDEIAS, f"Tendências:\n{ctx}")
                     if raw:
