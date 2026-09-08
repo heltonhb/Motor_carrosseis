@@ -1261,11 +1261,19 @@ with tab8:
                 st.markdown("### 📄 Resposta do NotebookLM")
                 st.markdown(result)
             
-            # Botão para usar no app
+            # Botões de ação
             st.markdown("---")
-            if st.button("📋 Usar resultado no app", use_container_width=True):
-                st.session_state["nb_result_to_use"] = result
-                st.success("✅ Resultado salvo! Vá para a aba 'Tendências' ou 'Ideias' para usar.")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📤 Enviar como Tendências", use_container_width=True):
+                    st.session_state["tendencias_texto"] = result
+                    st.success("✅ Enviado! Vá para aba '📈 Tendências'")
+            
+            with col2:
+                if st.button("📤 Enviar como Contexto para Ideias", use_container_width=True):
+                    st.session_state["nb_contexto_para_ideias"] = result
+                    st.success("✅ Enviado! Vá para aba '💡 Ideias' e use este contexto")
 
         # Link direto para o notebook
         if selected_nb_id:
