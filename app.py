@@ -431,6 +431,60 @@ with tab2:
 
     st.divider()
 
+    # ── Opção: Usar ideias do NotebookLM diretamente ─────────────────────────
+    if "nb_result" in st.session_state and st.session_state.get("nb_result"):
+        st.markdown("### 📋 Usar Ideias do NotebookLM")
+        st.info("💡 Você tem ideias prontas do NotebookLM. Use-as diretamente sem precisar gerar novas ideias.")
+        
+        if st.button("📤 Usar Ideias do NotebookLM", type="primary", use_container_width=True):
+            # Converter o resultado do NotebookLM para formato de ideias
+            nb_result = st.session_state["nb_result"]
+            
+            # Criar ideias formatadas a partir do Markdown
+            import re
+            
+            # Extrair ideias do Markdown
+            ideias_pattern = r"## Ideia \d+: (.+?)(?=## Ideia \d+|$)"
+            ideias_matches = re.findall(ideias_pattern, nb_result, re.DOTALL)
+            
+            ideias_formatadas = []
+            for i, ideia_text in enumerate(ideias_matches):
+                # Extrair campos
+                titulo_match = re.search(r"\*\*Eixo:\*\* (.+)", ideia_text)
+                eixo_match = re.search(r"\*\*Eixo:\*\* (.+)", ideia_text)
+                tema_match = re.search(r"\*\*Tema:\*\* (.+)", ideia_text)
+                cta_match = re.search(r"\*\*CTA:\*\* (.+)", ideia_text)
+                fonte_match = re.search(r"\*\*Fonte:\*\* (.+)", ideia_text)
+                
+                # Extrair slides
+                slides_pattern = r"\d+\. \*\*(.+?)\*\*: (.+)"
+                slides_matches = re.findall(slides_pattern, ideia_text)
+                slides_sugeridos = [{"slide": i+1, "tipo": tipo, "texto": texto} for i, (tipo, texto) in enumerate(slides_matches)]
+                
+                ideia_formatada = {
+                    "titulo": titulo_match.group(1).strip() if titulo_match else f"Ideia {i+1}",
+                    "eixo": eixo_match.group(1).strip() if eixo_match else "Didático",
+                    "tema": tema_match.group(1).strip() if tema_match else "",
+                    "publico_alvo": "Pais de classes A/B do Tatuapé",
+                    "palavras_chave_seo": ["apoio escolar Tatuapé", "reforço escolar Tatuapé"],
+                    "cta": cta_match.group(1).strip() if cta_match else "DESAFIO",
+                    "slides_sugeridos": slides_sugeridos,
+                    "kpi_alvo": "Salvamentos/Envios/Leads",
+                    "justificativa": fonte_match.group(1).strip() if fonte_match else "",
+                    "fonte_notebook": fonte_match.group(1).strip() if fonte_match else "",
+                }
+                ideias_formatadas.append(ideia_formatada)
+            
+            if ideias_formatadas:
+                st.session_state["ideias"] = {"ideias": ideias_formatadas}
+                save_geracao("ideias", {"ideias": ideias_formatadas})
+                st.success(f"✅ {len(ideias_formatadas)} ideias do NotebookLM carregadas!")
+                st.rerun()
+            else:
+                st.warning("⚠️ Não foi possível extrair ideias do Markdown. Tente gerar novas ideias.")
+        
+        st.divider()
+
     # ── Geração livre ────────────────────────────────────────────────────────
     c1, c2 = st.columns([3, 1])
     with c1:
