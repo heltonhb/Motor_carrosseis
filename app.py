@@ -440,40 +440,64 @@ with tab2:
             # Converter o resultado do NotebookLM para formato de ideias
             nb_result = st.session_state["nb_result"]
             
-            # Criar ideias formatadas a partir do Markdown
             import re
-            
-            # Extrair ideias do Markdown
-            ideias_pattern = r"## Ideia \d+: (.+?)(?=## Ideia \d+|$)"
-            ideias_matches = re.findall(ideias_pattern, nb_result, re.DOTALL)
-            
             ideias_formatadas = []
-            for i, ideia_text in enumerate(ideias_matches):
-                # Extrair campos
-                titulo_match = re.search(r"\*\*Eixo:\*\* (.+)", ideia_text)
-                eixo_match = re.search(r"\*\*Eixo:\*\* (.+)", ideia_text)
-                tema_match = re.search(r"\*\*Tema:\*\* (.+)", ideia_text)
-                cta_match = re.search(r"\*\*CTA:\*\* (.+)", ideia_text)
-                fonte_match = re.search(r"\*\*Fonte:\*\* (.+)", ideia_text)
+            
+            # Estratégia 1: Extrair JSON do bloco de código ```json ... ```
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', nb_result, re.DOTALL)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group(1))
+                    if "ideias" in data:
+                        ideias_formatadas = data["ideias"]
+                except json.JSONDecodeError:
+                    pass
+            
+            # Estratégia 2: Extrair JSON direto do texto
+            if not ideias_formatadas:
+                json_match = re.search(r'(\{\s*"ideias"\s*:\s*\[.*?\]\s*\})', nb_result, re.DOTALL)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group(1))
+                        if "ideias" in data:
+                            ideias_formatadas = data["ideias"]
+                    except json.JSONDecodeError:
+                        pass
+            
+            # Estratégia 3: Extrair de Markdown com ## Ideia
+            if not ideias_formatadas:
+                ideias_pattern = r"## Ideia \d+: (.+?)(?=## Ideia \d+|$)"
+                ideias_matches = re.findall(ideias_pattern, nb_result, re.DOTALL)
                 
-                # Extrair slides
-                slides_pattern = r"\d+\. \*\*(.+?)\*\*: (.+)"
-                slides_matches = re.findall(slides_pattern, ideia_text)
-                slides_sugeridos = [{"slide": i+1, "tipo": tipo, "texto": texto} for i, (tipo, texto) in enumerate(slides_matches)]
-                
-                ideia_formatada = {
-                    "titulo": titulo_match.group(1).strip() if titulo_match else f"Ideia {i+1}",
-                    "eixo": eixo_match.group(1).strip() if eixo_match else "Didático",
-                    "tema": tema_match.group(1).strip() if tema_match else "",
-                    "publico_alvo": "Pais de classes A/B do Tatuapé",
-                    "palavras_chave_seo": ["apoio escolar Tatuapé", "reforço escolar Tatuapé"],
-                    "cta": cta_match.group(1).strip() if cta_match else "DESAFIO",
-                    "slides_sugeridos": slides_sugeridos,
-                    "kpi_alvo": "Salvamentos/Envios/Leads",
-                    "justificativa": fonte_match.group(1).strip() if fonte_match else "",
-                    "fonte_notebook": fonte_match.group(1).strip() if fonte_match else "",
-                }
-                ideias_formatadas.append(ideia_formatada)
+                for i, ideia_text in enumerate(ideias_matches):
+                    titulo_match = re.search(r"\*\*Título:\*\* (.+)", ideia_text)
+                    eixo_match = re.search(r"\*\*Eixo:\*\* (.+)", ideia_text)
+                    tema_match = re.search(r"\*\*Tema:\*\* (.+)", ideia_text)
+                    cta_match = re.search(r"\*\*CTA:\*\* (.+)", ideia_text)
+                    
+                    slides_pattern = r"\d+\. \*\*(.+?)\*\*: (.+)"
+                    slides_matches = re.findall(slides_pattern, ideia_text)
+                    slides_sugeridos = [{"slide": idx+1, "tipo": tipo, "texto": texto} for idx, (tipo, texto) in enumerate(slides_matches)]
+                    
+                    ideia_formatada = {
+                        "titulo": titulo_match.group(1).strip() if titulo_match else f"Ideia {i+1}",
+                        "eixo": eixo_match.group(1).strip() if eixo_match else "Didático",
+                        "tema": tema_match.group(1).strip() if tema_match else "",
+                        "publico_alvo": "Pais de classes A/B do Tatuapé",
+                        "palavras_chave_seo": ["apoio escolar Tatuapé", "reforço escolar Tatuapé"],
+                        "cta": cta_match.group(1).strip() if cta_match else "DESAFIO",
+                        "slides_sugeridos": slides_sugeridos,
+                        "kpi_alvo": "Salvamentos/Envios/Leads",
+                        "justificativa": "",
+                        "fonte_notebook": "",
+                    }
+                    ideias_formatadas.append(ideia_formatada)
+            
+            # Garantir campos padrão
+            for ideia in ideias_formatadas:
+                for campo, default in [("palavras_chave_seo", ["apoio escolar Tatuapé"]), ("kpi_alvo", "Salvamentos/Envios/Leads"), ("publico_alvo", "Pais de classes A/B do Tatuapé")]:
+                    if campo not in ideia:
+                        ideia[campo] = default
             
             if ideias_formatadas:
                 st.session_state["ideias"] = {"ideias": ideias_formatadas}
@@ -481,7 +505,7 @@ with tab2:
                 st.success(f"✅ {len(ideias_formatadas)} ideias do NotebookLM carregadas!")
                 st.rerun()
             else:
-                st.warning("⚠️ Não foi possível extrair ideias do Markdown. Tente gerar novas ideias.")
+                st.warning("⚠️ Não foi possível extrair ideias. Resposta do NotebookLM:")
         
         st.divider()
 
