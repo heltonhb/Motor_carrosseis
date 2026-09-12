@@ -3,23 +3,78 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
 from typing import Optional
 
 
-def _nlm_cmd(*args, profile: str = "default") -> list:
-    """Monta comando notebooklm com profile."""
-    cmd = ["notebooklm"]
+# Prefixo de persona para nivelar qualidade dos prompts NLM com o Gemini direto
+_PERSONA_PREFIX = (
+    "Atue como a Carol, estrategista sênior de marketing digital "
+    "da Ensina Mais Tatuapé (Rua Coelho Lisboa, 783). "
+    "WhatsApp oficial: (11) 94475-0009. "
+    "Público: pais de classes A/B do Tatuapé com filhos no Ensino Fundamental. "
+    "NUNCA mencione personagens da Turma da Mônica.\n\n"
+)
+
+
+def _get_nlm_binary() -> Optional[str]:
+    """
+    Encontra o binário do notebooklm no sistema.
+    Retorna None se não encontrado.
+    """
+    path = shutil.which("notebooklm")
+    if path:
+        return path
+    for candidate in [
+        "/home/helton/.local/bin/notebooklm",
+        os.path.expanduser("~/.local/bin/notebooklm"),
+        "/usr/local/bin/notebooklm",
+        "/usr/bin/notebooklm",
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+    return None  # binário não encontrado
+
+
+def is_nlm_available() -> bool:
+    """Retorna True se o CLI notebooklm estiver disponível no sistema."""
+    return _get_nlm_binary() is not None
+
+
+def check_auth() -> tuple[bool, str]:
+    """
+    Verifica se o CLI está autenticado com o NotebookLM.
+    Retorna (autenticado, mensagem_de_status).
+    """
+    cmd = _nlm_cmd("auth", "check")
+    stdout, stderr, code = _run_cmd(cmd)
+    if code == 0:
+        return True, stdout.strip() or "autenticado"
+    return False, (stderr.strip() or "não autenticado")
+
+
+def _nlm_cmd(*args, profile: str = "default") -> Optional[list]:
+    """
+    Monta comando notebooklm com profile e caminho absoluto.
+    Retorna None se o binário não estiver disponível.
+    """
+    binary = _get_nlm_binary()
+    if binary is None:
+        return None
+    cmd = [binary]
     if profile and profile != "default":
         cmd.extend(["--profile", profile])
     cmd.extend(args)
     return cmd
 
 
-def _run_cmd(cmd: list, timeout: int = 120) -> tuple:
+def _run_cmd(cmd: Optional[list], timeout: int = 120) -> tuple:
     """Executa comando e retorna (stdout, stderr, returncode)."""
+    if cmd is None:
+        return "", "notebooklm CLI não encontrado no sistema.", 1
     try:
         result = subprocess.run(
             cmd,
@@ -47,11 +102,18 @@ def list_notebooks(profile: str = "default") -> list:
     return []
 
 
+def _select_notebook(notebook_id: str, profile: str = "default") -> bool:
+    """Seleciona o notebook via `use`. Retorna True em caso de sucesso."""
+    cmd = _nlm_cmd("use", notebook_id, profile=profile)
+    _, _, code = _run_cmd(cmd)
+    return code == 0
+
+
 def get_notebook_info(notebook_id: str, profile: str = "default") -> dict:
     """Retorna informações de um notebook específico."""
-    cmd = _nlm_cmd("use", notebook_id, profile=profile)
-    _run_cmd(cmd)
-    
+    if not _select_notebook(notebook_id, profile):
+        return {}
+
     cmd = _nlm_cmd("status", "--json", profile=profile)
     stdout, stderr, code = _run_cmd(cmd)
     if code == 0:
@@ -80,10 +142,10 @@ def ask_notebook(
     Returns:
         Resposta do notebook ou None em caso de erro
     """
-    # Seleciona o notebook
-    cmd_use = _nlm_cmd("use", notebook_id, profile=profile)
-    _run_cmd(cmd_use)
-    
+    # Seleciona o notebook; se falhar, retorna None cedo
+    if not _select_notebook(notebook_id, profile):
+        return None
+
     # Cria arquivo temporário com o prompt
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", delete=False, encoding="utf-8"
@@ -128,10 +190,10 @@ def ask_notebook_streaming(
     Returns:
         Resposta completa do notebook ou None
     """
-    # Seleciona o notebook
-    cmd_use = _nlm_cmd("use", notebook_id, profile=profile)
-    _run_cmd(cmd_use)
-    
+    # Seleciona o notebook; se falhar, retorna None cedo
+    if not _select_notebook(notebook_id, profile):
+        return None
+
     # Cria arquivo temporário com o prompt
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", delete=False, encoding="utf-8"
@@ -140,32 +202,48 @@ def ask_notebook_streaming(
         prompt_file = f.name
     
     try:
-        # Executa a pergunta com streaming
+        # Executa a pergunta (sem flag --stream inválida)
         cmd = _nlm_cmd(
             "ask",
             "--prompt-file", prompt_file,
-            "--stream",
             profile=profile,
         )
-        
+
+        if cmd is None:
+            return None
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            bufsize=1,
         )
         
         full_response = []
         for line in process.stdout:
-            if line.strip():
-                full_response.append(line.strip())
-                if callback:
-                    callback(line.strip())
+            full_response.append(line)
+            if callback and line.strip():
+                callback(line)
         
-        process.wait(timeout=300)
+        try:
+            process.wait(timeout=300)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            return None
         
         if full_response:
-            return "\n".join(full_response)
+            text = "".join(full_response).strip()
+            # Remove ruídos do CLI do topo da resposta se presentes
+            text = re.sub(r"^(?:Continuing|Resumed) conversation [a-f0-9-]+\.\.\.\s*", "", text, flags=re.MULTILINE)
+            text = re.sub(r"^Answer:\s*", "", text, flags=re.MULTILINE)
+            if text:
+                return text.strip()
+        
+        stderr_output = process.stderr.read() if process.stderr else ""
+        if stderr_output and stderr_output.strip():
+            print("NLM stderr:", stderr_output.strip())
         
         return None
     finally:
@@ -173,23 +251,11 @@ def ask_notebook_streaming(
             os.remove(prompt_file)
 
 
-def search_in_notebook(
-    notebook_id: str,
-    query: str,
-    profile: str = "default",
-) -> Optional[str]:
-    """
-    Busca informações no notebook sobre um tema específico.
-    
-    Args:
-        notebook_id: ID do notebook
-        query: Termo ou frase para buscar
-        profile: Perfil NotebookLM
-    
-    Returns:
-        Resultados da busca ou None
-    """
-    prompt = f"""Baseado nas fontes deste notebook, responda sobre: {query}
+# ─── Prompt Builders (reutilizáveis por sync e streaming) ─────────────────────
+
+def _build_search_prompt(query: str) -> str:
+    """Prompt para busca livre no notebook."""
+    return _PERSONA_PREFIX + f"""Baseado nas fontes deste notebook, responda sobre: {query}
 
 Forneça uma resposta detalhada com:
 1. Resumo do que foi encontrado
@@ -199,26 +265,10 @@ Forneça uma resposta detalhada com:
 
 Seja específico e cite as fontes quando possível."""
 
-    return ask_notebook(notebook_id, prompt, profile)
 
-
-def get_trends(
-    notebook_id: str,
-    context: str = "educação infantil e reforço escolar",
-    profile: str = "default",
-) -> Optional[str]:
-    """
-    Busca tendências no notebook.
-    
-    Args:
-        notebook_id: ID do notebook
-        context: Contexto para busca de tendências
-        profile: Perfil NotebookLM
-    
-    Returns:
-        Tendências encontradas ou None
-    """
-    prompt = f"""Analise as fontes deste notebook e identifique TENDÊNCIAS atuais sobre {context}.
+def _build_trends_prompt(context: str = "educação infantil e reforço escolar") -> str:
+    """Prompt para análise de tendências."""
+    return _PERSONA_PREFIX + f"""Analise as fontes deste notebook e identifique TENDÊNCIAS atuais sobre {context}.
 
 Foque em:
 1. Tendências de conteúdo no Instagram para educação
@@ -243,33 +293,18 @@ Retorne um JSON com esta estrutura:
   ]
 }}"""
 
-    return ask_notebook(notebook_id, prompt, profile)
 
-
-def generate_ideas(
-    notebook_id: str,
-    trends: str = "",
-    profile: str = "default",
-) -> Optional[str]:
-    """
-    Gera ideias de carrossel baseadas no conteúdo do notebook.
-    
-    Args:
-        notebook_id: ID do notebook
-        trends: Tendências identificadas (opcional)
-        profile: Perfil NotebookLM
-    
-    Returns:
-        Ideias geradas ou None
-    """
+def _build_ideas_prompt(trends: str = "") -> str:
+    """Prompt para geração de ideias de carrossel."""
     context = f"\n\nTendências identificadas:\n{trends}" if trends else ""
-    
-    prompt = f"""Com base nas fontes deste notebook{context}, gere 6 IDEIAS DE CARROSSEL para o Instagram da Ensina Mais Tatuapé.
+    return _PERSONA_PREFIX + f"""Com base nas fontes deste notebook{context}, gere 6 IDEIAS DE CARROSSEL para o Instagram da Ensina Mais Tatuapé.
+WhatsApp oficial da unidade: (11) 94475-0009
 
 Cada ideia deve:
 - Seguir um dos eixos: Didático (salvamentos), Comportamental (envios DM), Diagnóstico (leads)
 - Incluir título chamativo, tema específico, público-alvo
 - Sugerir 8 slides com textos curtos (30-50 palavras cada)
+- O Slide 8 (CTA) DEVE conter a chamada com a palavra-chave e OBRIGATORIAMENTE o WhatsApp oficial da unidade: (11) 94475-0009
 - Ter um CTA com palavra-chave para comentário
 - Estar conectada com as fontes do notebook
 
@@ -292,24 +327,10 @@ Retorne JSON:
   ]
 }}"""
 
-    return ask_notebook(notebook_id, prompt, profile)
 
-
-def get_competitor_analysis(
-    notebook_id: str,
-    profile: str = "default",
-) -> Optional[str]:
-    """
-    Analisa concorrentes baseado no conteúdo do notebook.
-    
-    Args:
-        notebook_id: ID do notebook
-        profile: Perfil NotebookLM
-    
-    Returns:
-        Análise dos concorrentes ou None
-    """
-    prompt = """Analise as informações sobre concorrentes e mercado neste notebook.
+def _build_competitor_prompt() -> str:
+    """Prompt para análise de concorrentes."""
+    return _PERSONA_PREFIX + """Analise as informações sobre concorrentes e mercado neste notebook.
 
 Foque em:
 1. O que outras escolas/institutos de reforço estão postando
@@ -318,16 +339,101 @@ Foque em:
 4. Diferenciais da Ensina Mais Tatuapé vs concorrência
 
 Retorne um JSON:
-{{
+{
   "concorrentes": [
-    {{"nome": "...", "o_que_faz": "...", "pontos_fortes": "...", "pontos_fracos": "..."}}
+    {"nome": "...", "o_que_faz": "...", "pontos_fortes": "...", "pontos_fracos": "..."}
   ],
   "oportunidades_mercado": [
-    {{"oportunidade": "...", "acao_sugerida": "..."}}
+    {"oportunidade": "...", "acao_sugerida": "..."}
   ],
   "diferenciais_ensina_mais": [
-    {{"diferencial": "...", "como_explorar": "..."}}
+    {"diferencial": "...", "como_explorar": "..."}
   ]
-}}"""
+}"""
 
-    return ask_notebook(notebook_id, prompt, profile)
+
+# ─── Funções de query (sync — compatibilidade com pipeline automático) ────────
+
+def search_in_notebook(
+    notebook_id: str,
+    query: str,
+    profile: str = "default",
+) -> Optional[str]:
+    """Busca informações no notebook sobre um tema específico."""
+    return ask_notebook(notebook_id, _build_search_prompt(query), profile)
+
+
+def get_trends(
+    notebook_id: str,
+    context: str = "educação infantil e reforço escolar",
+    profile: str = "default",
+) -> Optional[str]:
+    """Busca tendências no notebook."""
+    return ask_notebook(notebook_id, _build_trends_prompt(context), profile)
+
+
+def generate_ideas(
+    notebook_id: str,
+    trends: str = "",
+    profile: str = "default",
+) -> Optional[str]:
+    """Gera ideias de carrossel baseadas no conteúdo do notebook."""
+    return ask_notebook(notebook_id, _build_ideas_prompt(trends), profile)
+
+
+def get_competitor_analysis(
+    notebook_id: str,
+    profile: str = "default",
+) -> Optional[str]:
+    """Analisa concorrentes baseado no conteúdo do notebook."""
+    return ask_notebook(notebook_id, _build_competitor_prompt(), profile)
+
+
+# ─── Funções de query com streaming (para UI em tempo real) ───────────────────
+
+def search_in_notebook_streaming(
+    notebook_id: str,
+    query: str,
+    profile: str = "default",
+    callback=None,
+) -> Optional[str]:
+    """Busca com streaming — callback recebe cada chunk de texto."""
+    return ask_notebook_streaming(
+        notebook_id, _build_search_prompt(query), profile, callback
+    )
+
+
+def get_trends_streaming(
+    notebook_id: str,
+    context: str = "educação infantil e reforço escolar",
+    profile: str = "default",
+    callback=None,
+) -> Optional[str]:
+    """Tendências com streaming — callback recebe cada chunk de texto."""
+    return ask_notebook_streaming(
+        notebook_id, _build_trends_prompt(context), profile, callback
+    )
+
+
+def generate_ideas_streaming(
+    notebook_id: str,
+    trends: str = "",
+    profile: str = "default",
+    callback=None,
+) -> Optional[str]:
+    """Ideias com streaming — callback recebe cada chunk de texto."""
+    return ask_notebook_streaming(
+        notebook_id, _build_ideas_prompt(trends), profile, callback
+    )
+
+
+def get_competitor_analysis_streaming(
+    notebook_id: str,
+    profile: str = "default",
+    callback=None,
+) -> Optional[str]:
+    """Concorrência com streaming — callback recebe cada chunk de texto."""
+    return ask_notebook_streaming(
+        notebook_id, _build_competitor_prompt(), profile, callback
+    )
+

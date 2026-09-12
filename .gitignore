@@ -8,3 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Secrets — nunca commitar com chaves reais
+.env
+.streamlit/secrets.toml
+
+# Dados persistidos localmente
+data/
+
+# Arquivos gerados
+prompts_automaticacao.txt
+*.zip
