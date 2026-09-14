@@ -18,7 +18,9 @@ import streamlit.components.v1 as components
 from config import (
     CORES,
     EIXOS,
+    EMPTY_STATES,
     FORMATO,
+    HERO,
     KPIS,
     NOTEBOOK_ID_PADRAO,
     NOTEBOOK_TITULO_PADRAO,
@@ -36,6 +38,7 @@ from prompts import (
     PROMPT_LEGENDAS,
     PROMPT_PROMPTS_IMAGEM,
     PROMPT_TENDENCIAS,
+    PROMPT_VIDEO_CURTO,
     TEMPERATURAS,
     get_prompt_cronograma,
     get_prompt_ideias,
@@ -73,6 +76,81 @@ st.markdown(f"""
         padding-top: 1.5rem;
         padding-bottom: 2rem;
         max-width: 1200px;
+    }}
+
+    /* ═══ Hero header ═══ */
+    .hero {{
+        position: relative;
+        background: {CORES['gradiente_hero']};
+        border: 1px solid {CORES['borda']};
+        border-radius: {CORES['raio_card']};
+        padding: 28px 32px;
+        margin-bottom: 18px;
+        overflow: hidden;
+    }}
+    .hero::after {{
+        content: "";
+        position: absolute;
+        top: -60px; right: -40px;
+        width: 240px; height: 240px;
+        background: {CORES['glow_primaria']};
+        filter: blur(60px);
+        border-radius: 50%;
+        pointer-events: none;
+    }}
+    .hero-inner {{ position: relative; z-index: 1; }}
+    .hero-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 14px;
+        border-radius: 999px;
+        background: rgba(108, 140, 255, 0.14);
+        color: {CORES['primaria']};
+        border: 1px solid rgba(108, 140, 255, 0.30);
+        font-size: 0.78em;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        margin-bottom: 12px;
+    }}
+    .hero-title {{
+        font-size: 2.1rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.03em !important;
+        line-height: 1.15 !important;
+        margin: 0 0 6px 0 !important;
+        background: {CORES['gradiente_texto']};
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent !important;
+    }}
+    .hero-subtitle {{
+        color: {CORES['texto_sec']} !important;
+        font-size: 0.98em;
+        margin: 0;
+        line-height: 1.5;
+    }}
+
+    /* ═══ Empty state ═══ */
+    .empty-state {{
+        text-align: center;
+        padding: 40px 24px;
+        background: {CORES['app_card']};
+        border: 1px dashed {CORES['borda']};
+        border-radius: {CORES['raio_card']};
+        margin: 12px 0;
+    }}
+    .empty-icon {{
+        font-size: 2.2rem;
+        margin-bottom: 10px;
+        animation: float 3s ease-in-out infinite;
+    }}
+    .empty-title {{ font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }}
+    .empty-desc {{ font-size: 0.88em; line-height: 1.5; max-width: 460px; margin: 0 auto; }}
+    @keyframes float {{
+        0%, 100% {{ transform: translateY(0); }}
+        50% {{ transform: translateY(-6px); }}
     }}
 
     /* ═══ Tipografia ═══ */
@@ -123,18 +201,20 @@ st.markdown(f"""
     .idea-card {{
         background: {CORES['app_card']};
         border: 1px solid {CORES['borda']};
-        border-radius: 12px;
+        border-radius: {CORES['raio_card']};
         padding: 20px 24px;
         margin-bottom: 16px;
         box-shadow: {CORES['app_sombra']};
         transition: box-shadow 0.3s cubic-bezier(0.32, 0.72, 0, 1),
-                    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+                    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+                    border-color 0.3s cubic-bezier(0.32, 0.72, 0, 1);
         position: relative;
         z-index: 1;
     }}
     .idea-card:hover {{
         box-shadow: {CORES['app_sombra_hover']};
         transform: translateY(-1px);
+        border-color: rgba(108, 140, 255, 0.28);
         z-index: 2;
     }}
     .idea-card h3 {{
@@ -239,33 +319,40 @@ st.markdown(f"""
     /* ═══ Botões primários ═══ */
     .stButton > button[kind="primary"],
     div[data-testid="stForm"] button[kind="primary"] {{
-        background-color: {CORES['primaria']};
-        color: #0A0A0F;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        padding: 8px 20px;
-        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
-        box-shadow: 0 2px 8px rgba(108, 140, 255, 0.25);
+        background-color: #1A1A2E !important;
+        color: #E8E8ED !important;
+        border: 1px solid {CORES['primaria']} !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        padding: 8px 20px !important;
+        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1) !important;
+        box-shadow: 0 2px 8px rgba(108, 140, 255, 0.15) !important;
     }}
     .stButton > button[kind="primary"]:hover {{
-        background-color: #8AA4FF;
-        box-shadow: 0 4px 16px rgba(108, 140, 255, 0.35);
+        background-color: #242440 !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 4px 18px rgba(108, 140, 255, 0.25) !important;
         transform: translateY(-1px);
+    }}
+    .stButton > button[kind="primary"]:active {{
+        transform: translateY(0) !important;
+        box-shadow: 0 2px 8px rgba(108, 140, 255, 0.15) !important;
     }}
 
     /* ═══ Botões secundários ═══ */
-    .stButton > button:not([kind="primary"]) {{
-        background-color: {CORES['app_card']};
-        color: {CORES['texto']};
-        border: 1px solid {CORES['borda']};
-        border-radius: 8px;
-        font-weight: 500;
-        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    .stButton > button:not([kind="primary"]),
+    .stDownloadButton > button {{
+        background-color: #141420 !important;
+        color: #E8E8ED !important;
+        border: 1px solid #2A2A3C !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1) !important;
     }}
-    .stButton > button:not([kind="primary"]):hover {{
-        background-color: {CORES['app_card2']};
-        border-color: #3A3A4C;
+    .stButton > button:not([kind="primary"]):hover,
+    .stDownloadButton > button:hover {{
+        background-color: #1A1A2E !important;
+        border-color: #3A3A4C !important;
     }}
 
     /* ═══ Inputs ═══ */
@@ -347,8 +434,9 @@ st.markdown(f"""
 
     /* ═══ Form submit ═══ */
     .stFormSubmitButton > button {{
-        background-color: {CORES['primaria']} !important;
-        color: #0A0A0F !important;
+        background-color: #1A1A2E !important;
+        color: #E8E8ED !important;
+        border: 1px solid {CORES['primaria']} !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
     }}
@@ -360,6 +448,50 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# ─── Forçar cores nos botões via JS (override styled-components) ─────────────
+st.html("""
+<script>
+(function(){
+    function fixButtons(){
+        // Primary buttons: dark bg, light text, blue border
+        document.querySelectorAll(
+            'button[data-testid="stBaseButton-primary"], ' +
+            'button[data-testid="stBaseButton-primaryFormSubmit"]'
+        ).forEach(function(btn){
+            btn.style.setProperty('background-color', '#1A1A2E', 'important');
+            btn.style.setProperty('color', '#E8E8ED', 'important');
+            btn.style.setProperty('font-weight', '600', 'important');
+            btn.style.setProperty('border', '1px solid #6C8CFF', 'important');
+            btn.style.setProperty('border-radius', '10px', 'important');
+            btn.querySelectorAll('p, span, div').forEach(function(el){
+                el.style.setProperty('color', '#E8E8ED', 'important');
+            });
+        });
+        // Secondary buttons
+        document.querySelectorAll(
+            'button[data-testid="stBaseButton-secondary"]'
+        ).forEach(function(btn){
+            btn.style.setProperty('background-color', '#141420', 'important');
+            btn.style.setProperty('color', '#E8E8ED', 'important');
+            btn.style.setProperty('border', '1px solid #2A2A3C', 'important');
+            btn.style.setProperty('border-radius', '8px', 'important');
+        });
+    }
+
+    fixButtons();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fixButtons);
+    }
+    setTimeout(fixButtons, 300);
+    setTimeout(fixButtons, 800);
+    setTimeout(fixButtons, 1500);
+    setTimeout(fixButtons, 3000);
+
+    var observer = new MutationObserver(function(){ fixButtons(); });
+    observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['style','class']});
+})();
+</script>
+""", unsafe_allow_javascript=True)
 
 # ─── Helpers de UI ────────────────────────────────────────────────────────────
 
@@ -403,6 +535,33 @@ def flow_progress() -> None:
         '<div style="margin-bottom:16px;">' + "".join(html_parts) + "</div>",
         unsafe_allow_html=True,
     )
+
+
+def empty_state(key: str) -> None:
+    """Renderiza um estado vazio premium (ícone + título + descrição)."""
+    estado = EMPTY_STATES.get(key)
+    if not estado:
+        return
+    st.markdown(f"""
+    <div class="empty-state">
+        <div class="empty-icon">{estado['icon']}</div>
+        <div class="empty-title" style="color:{CORES['texto']};">{estado['titulo']}</div>
+        <div class="empty-desc" style="color:{CORES['texto_sec']};">{estado['desc']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def hero_header() -> None:
+    """Cabeçalho premium com badge, título em gradiente e subtítulo."""
+    st.markdown(f"""
+    <div class="hero">
+        <div class="hero-inner">
+            <span class="hero-badge">🎯 {HERO['badge']}</span>
+            <h1 class="hero-title">{HERO['titulo']}</h1>
+            <p class="hero-subtitle">{HERO['subtitulo']}</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_idea_card(idea: dict, idx: int) -> None:
@@ -566,14 +725,11 @@ with st.sidebar:
 
 
 # ─── Título + barra de progresso do fluxo ────────────────────────────────────
-st.markdown(f"""
-# Motor de Carrosséis
-### {UNIDADE['nome']}
-""")
+hero_header()
 flow_progress()
 
 # ─── Tabs principais ──────────────────────────────────────────────────────────
-tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab9 = st.tabs([
     "📈 Tendências",
     "💡 Ideias",
     "🔬 NotebookLM",
@@ -582,6 +738,7 @@ tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📝 Legendas",
     "📅 Cronograma & Métricas",
     "📦 Lote",
+    "🎬 Vídeo Curto",
 ])
 
 
@@ -918,7 +1075,7 @@ with tab3:
     st.markdown("Gera prompts em inglês para criar cada slide com IA generativa.")
 
     if not st.session_state.get("ideias_selecionadas"):
-        st.info("📌 Selecione ideias na aba **Ideias** primeiro.")
+        empty_state("selecao")
     else:
         ideias_sel = st.session_state["ideias_selecionadas"]
         opcoes_p = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
@@ -1085,7 +1242,7 @@ with tab4:
     # Modo 3: Todos os slides de um carrossel
     st.markdown("### 🎠 Modo 3 — Gerar Carrossel Completo")
     if not st.session_state.get("ideias_selecionadas"):
-        st.info("📌 Selecione ideias na aba **Ideias** primeiro.")
+        empty_state("selecao")
     else:
         ideias_sel = st.session_state["ideias_selecionadas"]
         opts_c = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
@@ -1128,7 +1285,7 @@ with tab5:
     st.markdown("Gera 3 opções de legenda conectadas ao tema do carrossel selecionado.")
 
     if not st.session_state.get("ideias_selecionadas"):
-        st.info("📌 Selecione ideias na aba **Ideias** primeiro.")
+        empty_state("selecao")
     else:
         ideias_sel = st.session_state["ideias_selecionadas"]
         opts_l = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
@@ -1227,7 +1384,7 @@ with tab6:
 
     # ── Cronograma ───────────────────────────────────────────────────────────
     if not st.session_state.get("ideias_selecionadas"):
-        st.info("📌 Selecione ideias na aba **Ideias** primeiro.")
+        empty_state("selecao")
     else:
         ideias_sel = st.session_state["ideias_selecionadas"]
         st.markdown(f"**{len(ideias_sel)} ideia(s) selecionada(s).**")
@@ -1371,7 +1528,7 @@ with tab7:
     st.markdown("Gera prompts, slides e cronograma para todas as ideias selecionadas de uma vez.")
 
     if not st.session_state.get("ideias_selecionadas"):
-        st.info("📌 Selecione ideias na aba **Ideias** primeiro.")
+        empty_state("selecao")
     else:
         ideias_sel = st.session_state["ideias_selecionadas"]
         st.markdown(f"**{len(ideias_sel)} ideia(s) selecionada(s).**")
@@ -1530,8 +1687,9 @@ with tab8:
     # Verificar disponibilidade do CLI e autenticação
     if not nlm.is_nlm_available():
         st.error(
-            "❌ CLI `notebooklm` não encontrado no sistema. "
-            "Instale-o ou adicione-o ao PATH para usar esta aba. "
+            "❌ CLI `notebooklm` não encontrado no sistema. \n"
+            "Instale com: `pip install google-notebooklm-cli`\n"
+            "Ou siga o guia em: https://github.com/googlegoogle/notebooklm-cli\n"
             "As outras abas do app funcionam normalmente via Gemini."
         )
         authenticated = False
@@ -1579,6 +1737,9 @@ with tab8:
                 "⚠️ Nenhum notebook foi listado. Usando o notebook padrão configurado. "
                 "Verifique se há notebooks disponíveis na sua conta."
             )
+
+        # Persiste o notebook ativo para as demais abas (ex.: Vídeo Curto)
+        st.session_state["_nb_active_id"] = selected_nb_id
 
         # Sidebar com info do notebook
         with st.sidebar:
@@ -1796,34 +1957,62 @@ with tab8:
                         partial = "".join(streaming_chunks)
                         response_container.markdown(partial + " ▌")
 
+                # Mapear tipos de consulta para builders de prompt.
+                # A execução usa ask_notebook_streaming/ask_notebook direto com
+                # o prompt já montado (as funções get_*_streaming esperam o
+                # argumento cru, não o prompt pronto).
+                consulta_config = {
+                    "📈 Tendências do Setor": {
+                        "prompt_builder": nlm._build_trends_prompt,
+                        "args": {"context": "educação infantil e reforço escolar"},
+                        "result_key": "tendencias",
+                        "tab_name": "📈 Tendências"
+                    },
+                    "💡 Ideias de Carrossel": {
+                        "prompt_builder": nlm._build_ideas_prompt,
+                        "args": {},
+                        "result_key": "ideias",
+                        "tab_name": "💡 Ideias"
+                    },
+                    "🏢 Análise de Concorrência": {
+                        "prompt_builder": nlm._build_competitor_prompt,
+                        "args": {},
+                        "result_key": "concorrentes",
+                        "tab_name": "🏢 Análise de Concorrência"
+                    },
+                    "❓ Pergunta Livre": {
+                        "prompt_builder": nlm._build_search_prompt,
+                        "args": {},
+                        "result_key": None,
+                        "tab_name": "🔍 Consulta Livre"
+                    }
+                }
+
                 with st.status("🔍 Consultando NotebookLM…", expanded=True) as status_ctx:
-                    # Chamar a variante streaming de cada tipo com fallback sync
-                    if consulta_tipo == "📈 Tendências do Setor":
-                        result = nlm.get_trends_streaming(selected_nb_id, callback=on_chunk)
-                        if not result:
-                            result = nlm.get_trends(selected_nb_id)
-                    elif consulta_tipo == "💡 Ideias de Carrossel":
-                        result = nlm.generate_ideas_streaming(selected_nb_id, callback=on_chunk)
-                        if not result:
-                            result = nlm.generate_ideas(selected_nb_id)
-                    elif consulta_tipo == "🏢 Análise de Concorrência":
-                        result = nlm.get_competitor_analysis_streaming(selected_nb_id, callback=on_chunk)
-                        if not result:
-                            result = nlm.get_competitor_analysis(selected_nb_id)
-                    else:
+                    config = consulta_config[consulta_tipo]
+                    
+                    # Preparar argumentos
+                    prompt_args = config["args"].copy()
+                    if consulta_tipo == "❓ Pergunta Livre":
                         pergunta_texto = st.session_state.get("nb_pergunta_livre", "").strip()
                         if not pergunta_texto:
                             st.warning("⚠️ Digite uma pergunta para consultar o notebook.")
                             result = None
                         else:
-                            result = nlm.search_in_notebook_streaming(
-                                selected_nb_id, pergunta_texto, callback=on_chunk
-                            )
-                            if not result:
-                                result = nlm.search_in_notebook(selected_nb_id, pergunta_texto)
+                            prompt_args["query"] = pergunta_texto
+                            result = None  # Will be set below
+                    else:
+                        result = None  # Will be set below
 
-                    # ── Fallback Gemini quando NLM falha (opcional, só se há chave) ──
-                    if not result and _api_key_ok():
+                    # Executar consulta se ainda não definida
+                    if result is None:
+                        prompt = config["prompt_builder"](**prompt_args)
+                        result = nlm.ask_notebook_streaming(selected_nb_id, prompt, callback=on_chunk)
+                        if not result:
+                            result = nlm.ask_notebook(selected_nb_id, prompt)
+
+                    # Fallback Gemini quando NLM falha (opcional, só se há chave)
+                    if not result and _api_key_ok() and consulta_tipo in ["📈 Tendências do Setor", "💡 Ideias de Carrossel"]:
                         tb = {
                             "📈 Tendências do Setor": PROMPT_TENDENCIAS,
                             "💡 Ideias de Carrossel": get_prompt_ideias(),
@@ -1842,9 +2031,10 @@ with tab8:
                 response_container.empty()
 
                 if result:
+                    # Salvar resultado bruto para exibição
                     st.session_state["nb_result"] = result
                     
-                    # Se foram geradas ideias, popula automaticamente a aba Ideias e session_state
+                    # Processar resultado baseado no tipo
                     data_parsed = extract_json(result)
                     if not data_parsed:
                         try:
@@ -1852,17 +2042,29 @@ with tab8:
                         except Exception:
                             data_parsed = {}
                     
-                    if isinstance(data_parsed, dict) and "ideias" in data_parsed:
-                        ideias_list = data_parsed["ideias"]
-                        st.session_state["ideias"] = {"ideias": ideias_list}
-                        st.session_state["ideias_selecionadas"] = ideias_list
-                        save_geracao("ideias", {"ideias": ideias_list})
-                        st.success(f"✅ Consulta concluída! {len(ideias_list)} ideias foram enviadas para a aba '💡 Ideias'.")
-                    elif isinstance(data_parsed, dict) and "tendencias" in data_parsed:
-                        st.session_state["tendencias"] = data_parsed
-                        st.session_state["tendencias_texto"] = json.dumps(data_parsed, ensure_ascii=False)
-                        save_geracao("tendencias", data_parsed)
-                        st.success("✅ Consulta concluída! Dados enviados para a aba '📈 Tendências'.")
+                    # Persistir resultados estruturados para uso em outras abas
+                    if config["result_key"] and isinstance(data_parsed, dict) and config["result_key"] in data_parsed:
+                        key_data = data_parsed[config["result_key"]]
+                        
+                        if config["result_key"] == "ideias":
+                            ideias_list = key_data
+                            ideias_formatadas = [_format_ideia(i) for i in ideias_list]
+                            st.session_state["ideias"] = {"ideias": ideias_formatadas}
+                            st.session_state["ideias_selecionadas"] = ideias_formatadas
+                            save_geracao("ideias", {"ideias": ideias_formatadas})
+                            st.success(f"✅ Consulta concluída! {len(ideias_formatadas)} ideias foram enviadas para a aba '{config['tab_name']}'.")
+                            
+                        elif config["result_key"] == "tendencias":
+                            st.session_state["tendencias"] = key_data
+                            st.session_state["tendencias_texto"] = json.dumps(key_data, ensure_ascii=False)
+                            save_geracao("tendencias", key_data)
+                            st.success(f"✅ Consulta concluída! Dados enviados para a aba '{config['tab_name']}'.")
+                            
+                        else:
+                            # Para outros tipos, salvar genéricamente
+                            st.session_state[config["result_key"]] = key_data
+                            save_geracao(config["result_key"], key_data)
+                            st.success(f"✅ Consulta concluída! Dados enviados para a aba '{config['tab_name']}'.")
                     else:
                         st.success("✅ Consulta concluída!")
                 elif consulta_tipo != "❓ Pergunta Livre" or st.session_state.get("nb_pergunta_livre", "").strip():
@@ -1989,3 +2191,140 @@ with tab8:
             st.markdown("---")
             st.markdown(f"### 🔗 Link direto para o notebook")
             st.markdown(f"[Abrir no NotebookLM](https://notebooklm.google.com/notebook/{selected_nb_id})")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 9 — VÍDEO CURTO (requisição para Gemini Notebook — Video Overview "Short")
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab9:
+    st.markdown("## 🎬 Requisição de Vídeo Curto — Gemini Notebook")
+    st.markdown(
+        "Monta uma **requisição detalhada** para gerar um **Video Overview no formato \"Short\"** "
+        "no Gemini Notebook (Studio): um vídeo vertical 9:16 de ~60s que condensa o tema central "
+        "da ideia, **fiel ao roteiro dos slides**."
+    )
+
+    if not st.session_state.get("ideias_selecionadas"):
+        empty_state("selecao")
+    else:
+        ideias_sel = st.session_state["ideias_selecionadas"]
+        opcoes_v = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
+        escolha_v = st.selectbox("Ideia de origem:", list(opcoes_v.keys()), key="sel_video")
+
+        ideia = opcoes_v[escolha_v]
+        slides_list = ideia.get("slides_sugeridos", [])
+
+        # ── Prévia do roteiro (fonte da fidelidade) ──────────────────────────
+        if slides_list:
+            with st.expander(f"📄 Roteiro de origem ({len(slides_list)} slides)", expanded=False):
+                for slide in slides_list:
+                    st.markdown(f"**Slide {slide.get('slide','?')} — {slide.get('tipo','')}**")
+                    st.markdown(f"_{slide.get('texto','')}_")
+                    st.divider()
+        else:
+            st.warning("⚠️ Esta ideia não possui roteiro de slides. Gere os slides antes de montar a requisição.")
+
+        # ── Opção: gravar a requisição no Notebook ───────────────────────────
+        salvar_nlm = st.checkbox(
+            "🔬 Gravar também a requisição no notebook do Gemini Notebook (via CLI)",
+            value=True,
+            key="video_salvar_nlm",
+            help="Grava a requisição completa como pergunta no notebook ativo do Gemini Notebook.",
+        )
+
+        if st.button("🎬 Montar Requisição de Vídeo", type="primary", use_container_width=True, key="btn_video"):
+            if not _api_key_ok():
+                st.warning("⚠️ Configure a chave API Gemini.")
+            else:
+                ctx = (
+                    f"Carrossel:\n{json.dumps(ideia, ensure_ascii=False)}\n\n"
+                    f"Roteiro dos slides:\n{json.dumps(slides_list, ensure_ascii=False)}"
+                )
+                with st.spinner("🤖 Montando requisição para o Gemini Notebook…"):
+                    dados = call_gemini_json(PROMPT_VIDEO_CURTO, ctx, temperature=TEMPERATURAS["prompts_imagem"])
+                    if dados:
+                        st.session_state["video_curto"] = dados
+                        save_geracao("video_curto", dados)
+                        st.success("✅ Requisição montada!")
+
+        # ── Exibição do resultado ────────────────────────────────────────────
+        if st.session_state.get("video_curto"):
+            vd = st.session_state["video_curto"]
+
+            # Parâmetros de geração
+            params = vd.get("parametros_geracao", {})
+            if params:
+                st.markdown("### ⚙️ Parâmetros de Geração")
+                pcols = st.columns(4)
+                p_itens = [
+                    ("Formato", params.get("format", "Short")),
+                    ("Idioma", params.get("language", "Português (Brasil)")),
+                    ("Duração", params.get("duracao", "~60s")),
+                    ("Estilo Visual", params.get("visual_style_custom") or params.get("visual_style", "Classic")),
+                ]
+                for i, (label, valor) in enumerate(p_itens):
+                    with pcols[i]:
+                        st.markdown(f"""
+                        <div class="metric-box">
+                            <strong style="color:{CORES['texto_sec']};font-size:0.72em;text-transform:uppercase;">{label}</strong><br>
+                            <span style="color:{CORES['primaria']};font-weight:600;">{valor}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # Steering prompt
+            steering = vd.get("steering_prompt", "")
+            if steering:
+                st.markdown("### 🎯 Steering Prompt (cole no campo de tópico/foco)")
+                st.code(steering, language=None)
+                clipboard_button(steering, "📋 Copiar Steering Prompt", key="clip_video_steering")
+
+            # Narrativa
+            narrativa = vd.get("narrativa", "")
+            if narrativa:
+                st.markdown("### 📖 Narrativa do Short (fiel ao roteiro)")
+                st.markdown(narrativa)
+
+            # Requisição completa (registro / gravação no notebook)
+            requisicao_completa = vd.get("requisicao_completa", "")
+            if requisicao_completa:
+                st.markdown("### 📦 Requisição Completa (para registro/gravação)")
+                st.code(requisicao_completa, language=None)
+                clipboard_button(requisicao_completa, "📋 Copiar Requisição Completa", key="clip_video_req")
+
+                # Gravar no Notebook via CLI
+                if salvar_nlm and nlm.is_nlm_available():
+                    if st.button("🔬 Gravar Requisição no Gemini Notebook", use_container_width=True, key="btn_video_nlm"):
+                        with st.spinner("📚 Enviando para o Gemini Notebook…"):
+                            nb_id = st.session_state.get("_nb_active_id") or NOTEBOOK_ID_PADRAO
+                            resposta = nlm.ask_notebook(nb_id, requisicao_completa)
+                            if resposta:
+                                st.success("✅ Requisição gravada no Gemini Notebook!")
+                            else:
+                                st.warning("⚠️ Não foi possível gravar. Verifique a autenticação (`notebooklm login`).")
+                elif salvar_nlm:
+                    st.warning("⚠️ CLI `notebooklm` não encontrado. A requisição não foi gravada.")
+
+            if vd.get("instrucoes_uso"):
+                st.divider()
+                st.markdown("### 💡 Como Usar")
+                st.info(vd["instrucoes_uso"])
+
+            # Exportações
+            st.divider()
+            c1, c2 = st.columns(2)
+            with c1:
+                st.download_button(
+                    "⬇️ Exportar JSON",
+                    data=json.dumps(vd, ensure_ascii=False, indent=2),
+                    file_name="requisicao_video_curto.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with c2:
+                st.download_button(
+                    "⬇️ Exportar Requisição (.txt)",
+                    data=requisicao_completa,
+                    file_name="requisicao_video_curto.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )

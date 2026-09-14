@@ -10,12 +10,26 @@ import time
 from typing import Optional
 
 
+# Catálogo oficial de cursos da Ensina Mais Tatuapé. Todo conteúdo DEVE orbitar
+# um desses cursos — nunca invente ou generalize para algo fora do portfólio.
+_CURSOS_ENSAINA_MAIS = [
+    "Apoio Escolar — Português (Ensino Fundamental)",
+    "Apoio Escolar — Matemática (Ensino Fundamental)",
+    "Tecnologia — Robótica",
+    "Tecnologia — Programação",
+]
+
+_CURSOS_TXT = "; ".join(_CURSOS_ENSAINA_MAIS)
+
 # Prefixo de persona para nivelar qualidade dos prompts NLM com o Gemini direto
 _PERSONA_PREFIX = (
     "Atue como a Carol, estrategista sênior de marketing digital "
     "da Ensina Mais Tatuapé (Rua Coelho Lisboa, 783). "
     "WhatsApp oficial: (11) 94475-0009. "
     "Público: pais de classes A/B do Tatuapé com filhos no Ensino Fundamental. "
+    "Cursos da unidade (todo conteúdo DEVE orbitar um deles): "
+    + _CURSOS_TXT + ". "
+    "NUNCA crie conteúdo fora desse portfólio de cursos. "
     "NUNCA mencione personagens da Turma da Mônica.\n\n"
 )
 
@@ -154,9 +168,13 @@ def ask_notebook(
         prompt_file = f.name
     
     try:
-        # Executa a pergunta
+        # Executa a pergunta. `--new` inicia uma conversa limpa para cada
+        # consulta: o CLI, por padrão, CONTINA a última conversa do servidor,
+        # o que faz o modelo repetir respostas anteriores. `-y` pula a
+        # confirmação da exclusão (imperativo em chamadas automáticas).
         cmd = _nlm_cmd(
             "ask",
+            "--new", "-y",
             "--prompt-file", prompt_file,
             profile=profile,
         )
@@ -202,9 +220,12 @@ def ask_notebook_streaming(
         prompt_file = f.name
     
     try:
-        # Executa a pergunta (sem flag --stream inválida)
+        # Executa a pergunta. `--new` zera a conversa do servidor a cada
+        # consulta (padrão do CLI é CONTINUAR a última), `-y` pula a
+        # confirmação destrutiva. Sem isso o modelo repete respostas antigas.
         cmd = _nlm_cmd(
             "ask",
+            "--new", "-y",
             "--prompt-file", prompt_file,
             profile=profile,
         )
@@ -294,40 +315,114 @@ Retorne um JSON com esta estrutura:
 }}"""
 
 
-def _build_ideas_prompt(trends: str = "") -> str:
-    """Prompt para geração de ideias de carrossel."""
-    context = f"\n\nTendências identificadas:\n{trends}" if trends else ""
-    return _PERSONA_PREFIX + f"""Com base nas fontes deste notebook{context}, gere 6 IDEIAS DE CARROSSEL para o Instagram da Ensina Mais Tatuapé.
-WhatsApp oficial da unidade: (11) 94475-0009
+def _carregar_ideias_historico(limit: int = 30) -> list[str]:
+    """
+    Lê as gerações anteriores ('ideias') de data/historico_geracoes.json e
+    retorna uma lista de temas/títulos já usados, para o prompt evitar repeti-los.
+    """
+    import json as _json
+    from pathlib import Path as _Path
 
-Cada ideia deve:
-- Seguir um dos eixos: Didático (salvamentos), Comportamental (envios DM), Diagnóstico (leads)
-- Incluir título chamativo, tema específico, público-alvo
-- Sugerir 8 slides com textos curtos (30-50 palavras cada)
-- O Slide 8 (CTA) DEVE conter a chamada com a palavra-chave e OBRIGATORIAMENTE o WhatsApp oficial da unidade: (11) 94475-0009
-- Ter um CTA com palavra-chave para comentário
-- Estar conectada com as fontes do notebook
+    path = _Path(__file__).resolve().parent / "data" / "historico_geracoes.json"
+    excl = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            registros = _json.load(f)
+    except Exception:
+        return excl
 
-Retorne JSON:
-{{
-  "ideias": [
-    {{
-      "titulo": "...",
-      "eixo": "Didático/Comportamental/Diagnóstico",
-      "tema": "...",
-      "publico_alvo": "...",
-      "cta": "PALAVRA_CHAVE",
-      "slides_sugeridos": [
-        {{"slide": 1, "tipo": "Capa", "texto": "..."}},
-        ...
-      ],
-      "fonte_notebook": "Qual fonte do notebook inspirou esta ideia",
-      "justificativa": "Por que esta ideia vai funcionar"
-    }}
-  ]
-}}"""
+    if not isinstance(registros, list):
+        return excl
+
+    for reg in registros:
+        if not isinstance(reg, dict) or reg.get("tipo") != "ideias":
+            continue
+        dados = reg.get("dados") or {}
+        for idea in dados.get("ideias", []) if isinstance(dados, dict) else []:
+            if not isinstance(idea, dict):
+                continue
+            tema = (idea.get("tema") or "").strip()
+            titulo = (idea.get("titulo") or "").strip()
+            item = f"- {tema}" if tema else (f"- {titulo}" if titulo else "")
+            if item and item not in excl:
+                excl.append(item)
+    return excl[:limit]
 
 
+def _build_ideas_prompt(trends: str = "", exclusions: Optional[list] = None) -> str:
+    """
+    Prompt para geração de ideias de carrossel com ênfase em diversidade.
+
+    Args:
+        trends: tendências já identificadas para ancorar as ideias.
+        exclusions: lista de temas/títulos já usados (para evitar reciclagem).
+            Se None, carrega automaticamente das gerações anteriores.
+    """
+    if exclusions is None:
+        exclusions = _carregar_ideias_historico()
+
+    if trends:
+        context = f"\n\nTendências identificados:\n{trends}"
+    else:
+        context = ""
+
+    if exclusions:
+        bloco_excl = (
+            "\n\n**TEMAS JÁ UTILIZADOS — NÃO REPITA NENHUM (nem a ideia, nem tema equivalente):\n"
+            + "\n".join(exclusions)
+            + "\n"
+        )
+    else:
+        bloco_excl = ""
+
+    cursos_str = "\n".join(f"- {c}" for c in _CURSOS_ENSAINA_MAIS)
+    bloco_cursos = (
+        "\n\n**CURSOS OFICIAIS DA ENSINA MAIS TATUAPÉ (OBRIGATÓRIO orbitar um deles):\n"
+        f"{cursos_str}\n"
+    )
+
+    _prompt = _PERSONA_PREFIX + (
+        "Com base nas fontes deste notebook{context}{bloco_excl}{bloco_cursos}\n\n"
+        "Gere 6 IDEIAS DE CARROSSEL para o Instagram da Ensina Mais Tatuapé.\n"
+        "WhatsApp oficial da unidade: (11) 94475-0009\n\n"
+        "**Requisitos de diversidade (OBRIGATÓRIOS):\n"
+        "0. **TODO conteúdo deve orbitar os cursos oficiais listados acima** — cada ideia precisa estar ligada a pelo menos um deles (Português, Matemática, Robótica ou Programação). Não crie temas fora do portfólio de cursos. Distribua as 6 ideias entre os 4 cursos.\n"
+        "1. Distribua as ideias entre os eixos: exatamente 2 Didático (foco em salvamentos), 2 Comportamental (foco em envios DM) e 2 Diagnóstico (foco em leads WhatsApp).\n"
+        "2. Cada ideia deve ter um **tipo de hook** diferente entre: pergunta provocativa, dado surpreendente, depoimento breve, desafio, curiosidade estatística, promessa de resultado rápido.\n"
+        "3. O **CTA** (call‑to‑action) de cada ideia deve usar uma palavra‑chave de comentário única (ex.: DESAFIO, TRANSFORMA, VERDADE, MUDANÇA, RESULTADO, AJUDA) e, obrigatoriamente, incluir o WhatsApp oficial: (11) 94475-0009.\n"
+        "4. Evite iniciar mais de uma ideia com a mesma estrutura frase‑de‑abertura (não repita “Imagine que…”, “Você sabia que…”, “E se…”, etc.).\n"
+        "5. Variegue o **tom**: algumas ideias podem ser motivacionais, outras informativas, outras urgentes ou empáticas, mas mantenha sempre linguagem adequada para pais de classes A/B do Tatuapé.\n"
+        "6. Cada ideia deve trazer um **tema específico** que não seja sinônimo ou parafrase de outro tema da lista. Se um tema da lista de 'TEMAS JÁ UTILIZADOS' for parecido, escolha outro ângulo.\n"
+        "7. Nos slides sugeridos (8 slides), varie os tipos de slide (Capa, Problema, Desenvolvimento, Dica prática, Exemplo, Benefício, Método, CTA) de forma que nenhuma ideia repita exatamente a mesma sequência de tipos.\n\n"
+        "**Estrutura de saída (JSON rígido):\n"
+        "{\n"
+        "  \"ideias\": [\n"
+        "    {\n"
+        "      \"titulo\": \"... (máx 60 caracteres)\","
+        "      \"curso\": \"Um dos 4 cursos oficiais (Português / Matemática / Robótica / Programação)\","
+        "      \"eixo\": \"Didático/Comportamental/Diagnóstico\","
+        "      \"tema\": \"... (frase completa, específico)\","
+        "      \"publico_alvo\": \"Pais de classes A/B do Tatuapé\","
+        "      \"cta\": \"PALAVRA_CHAVE\","
+        "      \"slides_sugeridos\": [\n"
+        "        {\"slide\": 1, \"tipo\": \"Capa\", \"texto\": \"... (30‑50 palavras)\"},\n"
+        "        ...\n"
+        "        {\"slide\": 8, \"tipo\": \"CTA\", \"texto\": \"Comente \\\"PALAVRA_CHAVE\\\" ou fale no WhatsApp (11) 94475-0009 para agendar uma avaliação gratuita.\"}\n"
+        "      ],\n"
+        "      \"fonte_notebook\": \"Título da fonte real do notebook + citação curta que inspirou esta ideia\","
+        "      \"justificativa\": \"Por que esta ideia vai funcionar, amarrada à fonte citada (máx 1 frase)\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "**Importante:** \n"
+        "- Seja objetivo e criativo; não reutilize fórmulas de outras ideias. \n"
+        "- CADA ideia DEVE preencher fonte_notebook com a fonte real do notebook (título + trecho curto). Se várias ideias citassem a mesma fonte, mude o ângulo. \n"
+        "- Não inclua texto fora do JSON válido."
+    )
+    # Interpolação manual: a string contém dezenas de `{}` do template JSON,
+    # então `.format()`/f-string quebrariam. `{context}`, `{bloco_excl}` e
+    # `{bloco_cursos}` aparecem uma única vez.
+    return _prompt.replace("{context}", context).replace("{bloco_excl}", bloco_excl).replace("{bloco_cursos}", bloco_cursos)
 def _build_competitor_prompt() -> str:
     """Prompt para análise de concorrentes."""
     return _PERSONA_PREFIX + """Analise as informações sobre concorrentes e mercado neste notebook.
@@ -350,18 +445,6 @@ Retorne um JSON:
     {"diferencial": "...", "como_explorar": "..."}
   ]
 }"""
-
-
-# ─── Funções de query (sync — compatibilidade com pipeline automático) ────────
-
-def search_in_notebook(
-    notebook_id: str,
-    query: str,
-    profile: str = "default",
-) -> Optional[str]:
-    """Busca informações no notebook sobre um tema específico."""
-    return ask_notebook(notebook_id, _build_search_prompt(query), profile)
-
 
 def get_trends(
     notebook_id: str,

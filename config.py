@@ -61,6 +61,54 @@ CORES = {
     "app_texto_muted": "#8B8B9E",
     "app_sombra": "0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3)",
     "app_sombra_hover": "0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3)",
+    # Radiação / glows para o hero e estados premium
+    "glow_primaria": "rgba(108, 140, 255, 0.25)",
+    "glow_secundaria": "rgba(52, 211, 153, 0.20)",
+    "gradiente_hero": "radial-gradient(1200px 400px at 20% -10%, rgba(108,140,255,0.22), transparent 60%), radial-gradient(900px 300px at 90% 0%, rgba(129,140,248,0.16), transparent 55%)",
+    "gradiente_texto": "linear-gradient(100deg, #8AA4FF 0%, #6C8CFF 45%, #818CF8 100%)",
+    "raio_card": "16px",
+    "raio_controle": "10px",
+}
+
+# ─── Design tokens do hero / stats (usados no cabeçalho premium) ─────────────
+HERO = {
+    "titulo": "Motor de Carrosséis",
+    "subtitulo": "Conteúdo de Instagram com estratégia, do briefing ao cronograma.",
+    "badge": "Ensina Mais Tatuapé",
+}
+
+# ─── Estados vazios centralizados (ícone + título + descrição) ───────────────
+EMPTY_STATES = {
+    "tendencias": {
+        "icon": "📈",
+        "titulo": "Nenhuma análise ainda",
+        "desc": "Rode uma análise de tendências para descobrir o que está funcionando no Instagram educacional do Tatuapé.",
+    },
+    "ideias": {
+        "icon": "💡",
+        "titulo": "Nenhuma ideia gerada",
+        "desc": "Gere ideias estratégicas (ou use as do NotebookLM) para começar a montar seus carrosséis.",
+    },
+    "selecao": {
+        "icon": "✅",
+        "titulo": "Nenhuma ideia selecionada",
+        "desc": "Marque ideias na aba \"Ideias\" para usá-las em prompts, legendas e cronograma.",
+    },
+    "prompts": {
+        "icon": "🎨",
+        "titulo": "Nenhum prompt gerado",
+        "desc": "Selecione uma ideia e gere os prompts de imagem em inglês para o Google Flow.",
+    },
+    "legendas": {
+        "icon": "📝",
+        "titulo": "Nenhuma legenda gerada",
+        "desc": "Gere legendas de alta conversão conectadas ao tema do seu carrossel.",
+    },
+    "cronograma": {
+        "icon": "📅",
+        "titulo": "Nenhum cronograma ainda",
+        "desc": "Gere um cronograma de postagens de 2 semanas com datas reais e protocolo das primeiras horas.",
+    },
 }
 
 # ─── Fontes ──────────────────────────────────────────────────────────────────

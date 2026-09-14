@@ -161,13 +161,14 @@ def sync_session_from_disk(session_state: dict) -> None:
         session_state["historico_metricas"] = metricas
 
     # Última geração de cada tipo
-    for tipo in ("tendencias", "ideias", "cronograma", "prompts", "legendas"):
+    for tipo in ("tendencias", "ideias", "cronograma", "prompts", "legendas", "video_curto"):
         key_map = {
             "tendencias": "tendencias",
             "ideias": "ideias",
             "cronograma": "cronograma",
             "prompts": "prompts",
             "legendas": "legendas",
+            "video_curto": "video_curto",
         }
         session_key = key_map[tipo]
         if session_key not in session_state:

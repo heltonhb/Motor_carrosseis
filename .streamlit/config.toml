@@ -1,0 +1,13 @@
+# Tema base do Streamlit — alinhado à paleta dark do app.
+# O CSS em app.py refina o que este tema não cobre (HTML customizado, cards, etc.).
+[theme]
+base = "dark"
+primaryColor = "#A5B4FC"
+backgroundColor = "#0A0A0F"
+secondaryBackgroundColor = "#141420"
+textColor = "#E8E8ED"
+font = "sans serif"
+
+[server]
+# Permite o app expor o botão "Always rerun" e logs no topo durante dev.
+# (configuração mínima; os demais parâmetros seguem o default)
