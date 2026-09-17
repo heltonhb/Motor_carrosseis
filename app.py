@@ -14,6 +14,7 @@ from io import BytesIO
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import notebooklm_client as nlm
 from batch_engine import (
@@ -507,11 +508,46 @@ def _api_key_ok() -> bool:
 
 def clipboard_button(text: str, label: str, key: str) -> None:
     """
-    Botão que exibe o texto para copiar manualmente.
+    Botão que copia direto para a área de transferência via
+    navigator.clipboard (funciona em localhost, que é contexto seguro).
+    Fallback: se a API falhar (ex.: HTTP não seguro), exibe o texto
+    para copiar manualmente, como no comportamento antigo.
     """
     if st.button(label, key=key, use_container_width=True):
+        components.html(
+            f"""
+            <script>
+            (function() {{
+                var texto = {json.dumps(text)};
+                if (navigator.clipboard && window.isSecureContext) {{
+                    navigator.clipboard.writeText(texto).then(function() {{
+                        var d = parent.document.getElementById("clip-feedback-{key}");
+                        d.textContent = "✅ Copiado!";
+                        setTimeout(function(){{ d.textContent = ""; }}, 2000);
+                    }}).catch(function() {{
+                        fallback();
+                    }});
+                }} else {{
+                    fallback();
+                }}
+                function fallback() {{
+                    var ta = document.createElement("textarea");
+                    ta.value = texto;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try {{ document.execCommand("copy"); }} catch(e) {{}}
+                    document.body.removeChild(ta);
+                    var d = parent.document.getElementById("clip-feedback-{key}");
+                    d.textContent = "✅ Copiado!";
+                    setTimeout(function(){{ d.textContent = ""; }}, 2000);
+                }}
+            }})();
+            </script>
+            """,
+            height=0,
+        )
+        st.success("✅ Copiado para a área de transferência!")
         st.code(text, language=None)
-        st.success("Copie o texto acima!")
 
 
 def flow_progress() -> None:
@@ -733,7 +769,7 @@ hero_header()
 flow_progress()
 
 # ─── Tabs principais ──────────────────────────────────────────────────────────
-tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab9 = st.tabs([
+tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab9, tab10 = st.tabs([
     "📈 Tendências",
     "💡 Ideias",
     "🔬 NotebookLM",
@@ -743,6 +779,7 @@ tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab9 = st.tabs([
     "📅 Cronograma & Métricas",
     "📦 Lote",
     "🎬 Vídeo Curto",
+    "🗂️ Histórico",
 ])
 
 
@@ -1007,23 +1044,35 @@ with tab2:
             ["Todos", "Didático (Salvamentos)", "Comportamental (Envios DM)", "Diagnóstico (Leads WhatsApp)"],
         )
     with c2:
-        if st.button("🎲 Gerar Ideias", type="primary", use_container_width=True):
-            if not _api_key_ok():
-                st.warning("⚠️ Configure a chave API Gemini.")
-            else:
-                # Verificar se há contexto do NotebookLM
-                ctx = st.session_state.get("nb_contexto_para_ideias", "")
-                if not ctx:
-                    ctx = st.session_state.get(
-                        "tendencias_texto",
-                        "Sem dados de tendências. Gere ideias gerais para Tatuapé, SP.",
-                    )
-                with st.spinner("🤖 Gerando 6 ideias estratégicas de alta retenção…"):
-                    dados = call_gemini_json(get_prompt_ideias(), f"Tendências:\n{ctx}", temperature=TEMPERATURAS["ideias"])
-                    if dados:
-                        st.session_state["ideias"] = dados
-                        save_geracao("ideias", dados)
-                        st.success("✅ 6 ideias geradas com alta retenção e diversidade de ganchos!")
+        col_gerar, col_nova = st.columns(2)
+        with col_gerar:
+            gerar_ideias_btn = st.button("🎲 Gerar Ideias", type="primary", use_container_width=True)
+        with col_nova:
+            if st.button("🔄 Forçar novas", use_container_width=True,
+                         help="Ignora o cache e gera ideias novas"):
+                invalidate_cache(get_prompt_ideias())
+                st.session_state.pop("ideias", None)
+                st.rerun()
+
+    if gerar_ideias_btn:
+        if not _api_key_ok():
+            st.warning("⚠️ Configure a chave API Gemini.")
+        else:
+            # Invalida o cache SEMPRE no clique — cada clique = lote novo (M6)
+            invalidate_cache(get_prompt_ideias())
+            # Verificar se há contexto do NotebookLM
+            ctx = st.session_state.get("nb_contexto_para_ideias", "")
+            if not ctx:
+                ctx = st.session_state.get(
+                    "tendencias_texto",
+                    "Sem dados de tendências. Gere ideias gerais para Tatuapé, SP.",
+                )
+            with st.spinner("🤖 Gerando 6 ideias estratégicas de alta retenção…"):
+                dados = call_gemini_json(get_prompt_ideias(), f"Tendências:\n{ctx}", temperature=TEMPERATURAS["ideias"])
+                if dados:
+                    st.session_state["ideias"] = dados
+                    save_geracao("ideias", dados)
+                    st.success("✅ 6 ideias geradas com alta retenção e diversidade de ganchos!")
 
     if st.session_state.get("ideias"):
         dados_ideias = st.session_state["ideias"]
@@ -2338,3 +2387,76 @@ with tab9:
                     mime="text/plain",
                     use_container_width=True,
                 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 10 — HISTÓRICO DE GERAÇÕES (M3)
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab10:
+    st.markdown("## 🗂️ Histórico de Gerações")
+    st.markdown("Últimas 50 gerações salvas em disco. Expanda para ver o conteúdo e restaure qualquer uma.")
+
+    from persistence import load_historico_geracoes  # noqa: PLC0415
+
+    historico = load_historico_geracoes()
+
+    if not historico:
+        st.info("Nenhuma geração salva ainda. Gere conteúdo nas outras abas e ele aparecerá aqui.")
+    else:
+        # Filtro por tipo
+        tipos_disponiveis = ["Todos"] + sorted({e.get("tipo", "?") for e in historico})
+        filtro_tipo = st.selectbox("Filtrar por tipo:", tipos_disponiveis)
+        filtrado = [e for e in historico if filtro_tipo == "Todos" or e.get("tipo") == filtro_tipo]
+
+        st.caption(f"Mostrando {len(filtrado)} de {len(historico)} gerações (mais recentes primeiro).")
+
+        # Mapeamento tipo → session_state key + ícone
+        _TIPO_META = {
+            "tendencias": ("tendencias", "📈"),
+            "ideias": ("ideias", "💡"),
+            "prompts": ("prompts_lote", "🎨"),
+            "legendas": ("legendas_lote", "📝"),
+            "cronograma": ("cronograma", "📅"),
+            "video_curto": ("video_curto", "🎬"),
+        }
+
+        for pos, entrada in enumerate(reversed(filtrado)):
+            tipo = entrada.get("tipo", "?")
+            quando = entrada.get("gerado_em", "?")
+            dados = entrada.get("dados", {})
+            session_key = _TIPO_META.get(tipo, (tipo, "📦"))[0]
+            icon = _TIPO_META.get(tipo, (tipo, "📦"))[1]
+
+            # Resumo amigável por tipo
+            if tipo == "ideias":
+                n = len(dados.get("ideias", []))
+                resumo = f"{n} ideias — {dados.get('ideias', [{}])[0].get('titulo', '')[:60]}" if n else "vazio"
+            elif tipo == "prompts":
+                prompts_inner = dados.get("prompts", dados)
+                resumo = f"{len(prompts_inner.get('slides', []))} slides de prompt"
+            elif tipo == "legendas":
+                resumo = f"{len(dados.get('legendas', []))} legendas"
+            elif tipo == "cronograma":
+                resumo = f"{len(dados.get('semana_1', [])) + len(dados.get('semana_2', []))} posts agendados"
+            elif tipo == "tendencias":
+                resumo = f"{len(dados.get('tendencias_conteudo', []))} tendências"
+            else:
+                resumo = str(dados)[:80]
+
+            with st.expander(f"{icon} {tipo.title()} — {quando} — {resumo}", expanded=False):
+                # Botão restaurar (M3)
+                if session_key:
+                    if st.button("↩️ Restaurar esta geração", key=f"restaurar_hist_{pos}", use_container_width=True):
+                        if session_key == "prompts_lote":
+                            st.session_state.setdefault("prompts_lote", []).append(dados)
+                        elif session_key == "legendas_lote":
+                            st.session_state.setdefault("legendas_lote", []).append(dados)
+                        elif session_key == "ideias":
+                            st.session_state["ideias"] = dados
+                            st.session_state["ideias_selecionadas"] = dados.get("ideias", [])
+                        else:
+                            st.session_state[session_key] = dados
+                        st.success(f"✅ Restaurado! Veja na aba correspondente ({tipo}).")
+                        st.rerun()
+
+                st.json(dados, expanded=False)

@@ -87,14 +87,35 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
-## 🔜 PRÓXIMO — Bloco 6: M-items de UX
+## ✅ CONCLUÍDO — Bloco 6 (2026-09-17, commit pendente)
 
-- **M4.** Copiar de verdade: `navigator.clipboard.writeText` no
-  `clipboard_button` (localhost é contexto seguro).
-- **M6.** "Gerar Ideias" 2ª vez devolve cache sem avisar — invalidar no
-  clique ou avisar como Tendências já faz.
-- **M3.** Histórico navegável: `data/historico_geracoes.json` guarda 50
-  gerações e não há lugar para ver/restaurar.
+**M3 + M4 + M6 — UX de copiar, cache e histórico**
+
+- **M4. Copiar de verdade.** `clipboard_button` agora usa
+  `navigator.clipboard.writeText` via `components.html` (localhost é
+  contexto seguro), com fallback `execCommand` para HTTP não seguro.
+  Feedback "✅ Copiado!" e mantém o texto visível.
+- **M6. Cache invalidado no clique.** "Gerar Ideias" chama
+  `invalidate_cache(get_prompt_ideias())` sempre — cada clique gera lote
+  novo. Adicionado botão "🔄 Forçar novas" (mesmo padrão da tab
+  Tendências) para limpar as ideias atuais e recomeçar.
+- **M3. Histórico navegável.** Nova tab "🗂️ Histórico": últimas 50
+  gerações de data/historico_geracoes.json com filtro por tipo, resumo
+  amigável (nº de ideias/slides/legendas/posts), JSON expandível e
+  botão "↩️ Restaurar" que devolve a geração para o session_state
+  correto (mapeia prompts/legendas para as listas _lote do P3).
+
+---
+
+## 🔜 PRÓXIMO — Bloco 7 (itens restantes de UX/estrutura)
+
+- **M2.** Gráfico de KPIs ao longo do tempo (pandas já importado) —
+  adicionar à tab Cronograma & Métricas.
+- **M5.** Cronograma → export .ics (Google Calendar).
+- **P7.** Verificar modelos Gemini contra client.models.list() com a
+  chave real (lista pode conter modelos inexistentes).
+- **P8.** XSS latente: html.escape() na saída do LLM em render_idea_card
+  e render_schedule_day (st.markdown unsafe_allow_html=True).
 
 ## 📋 BACKLOG
 
