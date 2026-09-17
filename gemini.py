@@ -8,6 +8,8 @@ Migração v2 (SDK nativo):
 - Cache via st.session_state preservado
 """
 
+import json
+import re
 import time
 import hashlib
 import os
