@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from config import DATA_DIR, HISTORICO_FILE, METRICAS_FILE
+from config import DATA_DIR, HISTORICO_FILE, METRICAS_FILE, IDEIAS_ESTADO_FILE
 
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
@@ -98,6 +98,40 @@ def delete_metrica(index: int) -> bool:
 def clear_metricas() -> bool:
     """Apaga todo o histórico de métricas."""
     return _write_json(METRICAS_FILE, [])
+
+
+# ─── Ciclo de Vida das Ideias ──────────────────────────────────────────────────
+
+
+def load_ideias_estado() -> dict[str, dict]:
+    """Carrega o estado de todas as ideias (status, legenda associada, etc.)."""
+    data = _read_json(IDEIAS_ESTADO_FILE)
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def update_idea_status(
+    idea_id: str,
+    status: str,
+    legenda_texto: str | None = None,
+    data_publicacao: str | None = None,
+) -> bool:
+    """
+    Atualiza o status de uma ideia (rascunho → aprovado → agendado → publicado).
+    Também pode associar a legenda usada e data de publicação.
+    """
+    estados = load_ideias_estado()
+    if idea_id not in estados:
+        estados[idea_id] = {"id": idea_id, "titulo": ""}
+
+    estados[idea_id]["status"] = status
+    if legenda_texto is not None:
+        estados[idea_id]["legenda_texto"] = legenda_texto
+    if data_publicacao is not None:
+        estados[idea_id]["data_publicacao"] = data_publicacao
+
+    return _write_json(IDEIAS_ESTADO_FILE, estados)
 
 
 # ─── Histórico de Gerações ────────────────────────────────────────────────────

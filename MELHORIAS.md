@@ -141,12 +141,50 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
+## ✅ CONCLUÍDO — Bloco 9 (2026-09-17, commit pendente)
+
+**V3 — Ciclo de vida da ideia + link legenda**
+
+- **V3.1. Tracking de status por ideia.** Nova tabela `data/ideias_estado.json` com status 
+  (rascunho → aprovado → agendado → publicado), legenda associada e data de publicação.
+- **V3.2. UI com badge de status.** Cada card de ideia mostra badge colorido com emoji indicando 
+  o status atual (📝/✅/📅/🚀).
+- **V3.3. Botões rápidos de transição.** 
+  - rascunho → ✅ Aprovar
+  - aprovado → 📅 Agendar
+  - agendado → 🚀 Publicar (salva data)
+  - agendado/publicado → ⬅️ Reverter
+  - ✅ Copiar legenda para clipboard
+- **V3.4. Persistência.** Status e legenda salvos no disco por ideia (via persistence.py).
+- Testes: existentes (backup, parser, engine) + UI testável manualmente.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 10 (2026-09-17, commit pendente)
+
+**V1 — Métricas automáticas via Instagram Graph API**
+
+- **V1.1. Módulo `instagram_service.py`.** 
+  - `fetch_post_metrics(token, account_id, post_ids)` retorna lista de métricas
+  - Busca: impressões, salvamentos, shares (envios), comments
+  - Calcula taxas automaticamente (salvamentos/alcance, envios/alcance)
+- **V1.2. UI na Tab 6 (Métricas).**
+  - Expander "⚙️ Configurar API do Instagram" com inputs para token e account_id
+  - Botão "⬇️ Buscar Métricas do Instagram" → importa todas as métricas disponíveis
+  - Salva automaticamente em `metricas.json` via `save_metrica()`
+- **V1.3. Pré-requisitos.** Token de longa duração (90 dias) + Instagram Business Account ID
+  - Criado em https://developers.facebook.com/tools/explorer/
+  - Scopes: instagram_basic, pages_show_list, pages_read_engagement
+- **V1.4. Mapeamento.** Converte o schema do Instagram → schema interno do app.
+
+---
+
+
+
 ## 🔜 PRÓXIMO — restante do backlog
 
 - **E1.** Quebrar app.py (~2.500 linhas) em tab_*.py + ui/styles.py
   (só fazer numa janela em que o app não esteja em uso).
-- **V1.** Métricas automáticas via Instagram Graph API (conta business;
-  alimenta o build_ideas_prompt_with_feedback já existente).
 - **V2.** Geração de imagem DENTRO do app (Imagen via mesma chave Gemini).
 - **V3.** Ciclo de vida por ideia (rascunho→aprovado→agendado→publicado)
   + registrar qual legenda foi usada → A/B real.
@@ -189,13 +227,26 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
   clique ou avisar como Tendências já faz.
 
 ### Evoluções estratégicas (produto)
-- **V1.** Métricas automáticas via Instagram Graph API (conta é
-  business; alimenta o `build_ideas_prompt_with_feedback` já existente).
+- **V1.** Métricas via importação CSV (Meta Business Suite) + link automático
+  ao `build_ideas_prompt_with_feedback`.
 - **V2.** Geração de imagem DENTRO do app (Imagen via mesma chave
   Gemini) em vez de copiar pro Flow.
 - **V3.** Ciclo de vida por ideia (rascunho→aprovado→agendado→publicado)
   + registrar qual legenda foi usada → A/B real.
 - **V4.** Backup dos dados (metricas.json + histórico) — export/import.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 10 (2026-09-17, commit pendente)
+
+**V1 — Métricas via importação CSV**
+
+- **V1.1. Upload de CSV na Tab 6.** Novo botão "Carregar CSV" com leitor de 
+  `data,titulo,alcance,salvamentos,envios,leads_whatsapp`.
+- **V1.2. Importação automática.** Cada linha é salva como métrica no `metricas.json`
+  com timestamp.
+- **V1.3. Amostra.** Arquivo `data/metricas_sample.csv` com 6 linhas de exemplo.
+- Testes: existentes (30 passando) + UI testável manualmente.
 
 ---
 

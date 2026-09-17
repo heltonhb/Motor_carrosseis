@@ -39,9 +39,12 @@ from ics_export import cronograma_para_ics
 from image_utils import add_text_overlay, create_slide_from_template
 from parser_nlm import extract_json
 from persistence import (
+    load_ideias_estado,
+    load_metricas,
     save_geracao,
     save_metrica,
     sync_session_from_disk,
+    update_idea_status,
 )
 from prompts import (
     PROMPT_TENDENCIAS,
@@ -619,6 +622,12 @@ def render_idea_card(idea: dict, idx: int) -> None:
     tipo_hook = idea.get("tipo_hook", "")
     score = idea.get("score")
     score_just = idea.get("score_justificativa", "")
+    idea_id = idea.get("id", f"ideia_{idx}")
+
+    # Carregar estado do ciclo de vida
+    estados = load_ideias_estado()
+    estado = estados.get(idea_id, {})
+    status = estado.get("status", "rascunho")
 
     badges_html = [
         f'<span style="background:rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.12); color:{color}; padding:3px 12px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.25); white-space:nowrap;">{_esc(eixo)}</span>'
@@ -635,6 +644,18 @@ def render_idea_card(idea: dict, idx: int) -> None:
         badges_html.append(
             f'<span style="background:rgba(129,140,248,0.12); color:#818CF8; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(129,140,248,0.25); white-space:nowrap;">⭐ {_esc(score)}/10 Retenção</span>'
         )
+    # Badge de status do ciclo de vida
+    status_colors = {
+        "rascunho": CORES["texto_sec"],
+        "aprovado": CORES["secundaria"],
+        "agendado": CORES["destaque"],
+        "publicado": CORES["primaria"],
+    }
+    status_color = status_colors.get(status, CORES["texto_sec"])
+    status_emoji = {"rascunho": "📝", "aprovado": "✅", "agendado": "📅", "publicado": "🚀"}.get(status, "📄")
+    badges_html.append(
+        f'<span style="background:rgba(255,255,255,0.05); color:{status_color}; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(255,255,255,0.15); white-space:nowrap;">{status_emoji} {_esc(status)}</span>'
+    )
 
     badges_str = "".join(badges_html)
 
@@ -1612,6 +1633,42 @@ with tab6:
                 st.metric("📱 Leads", str(leads_wpp),
                           delta="✅ Meta" if ok else "❌ Abaixo")
             st.success("✅ Métricas salvas em disco!")
+
+    # ── V1: Importar métricas via CSV ──────────────────────────────────────────
+    st.divider()
+    st.markdown("### 📱 Importar Métricas do Instagram (CSV)")
+    st.caption(
+        "Use o CSV do Meta Business Suite. Formato esperado: "
+        "data,titulo,alcance,salvamentos,envios,leads_whatsapp"
+    )
+
+    up = st.file_uploader("Carregar CSV", type=["csv"], key="csv_metrics_upload")
+    if up is not None:
+        import csv
+        from io import StringIO
+
+        try:
+            content = up.read().decode("utf-8")
+            reader = csv.DictReader(StringIO(content))
+            importados = 0
+            for row in reader:
+                from persistence import save_metrica
+
+                m_dict = {
+                    "data": row.get("data", "").strip(),
+                    "titulo": row.get("titulo", "").strip(),
+                    "alcance": int(row.get("alcance", 0) or 0),
+                    "salvamentos": int(row.get("salvamentos", 0) or 0),
+                    "envios": int(row.get("envios", 0) or 0),
+                    "leads_whatsapp": int(row.get("leads_whatsapp", 0) or 0),
+                    "registrado_em": datetime.now().isoformat(timespec="seconds"),
+                }
+                save_metrica(m_dict)
+                importados += 1
+
+            st.success(f"✅ {importados} métrica(s) importada(s) do CSV!")
+        except Exception as e:
+            st.error(f"❌ Erro ao ler CSV: {e}")
 
     # Histórico de métricas
     if st.session_state.get("historico_metricas"):
