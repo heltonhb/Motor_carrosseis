@@ -12,10 +12,10 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "persistence", "prompts", "templates", "parser_nlm", "batch_engine"]
+py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "persistence", "prompts", "templates", "parser_nlm", "batch_engine", "ics_export"]
 
 [tool.pytest.ini_options]
-testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py"]
+testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py", "test_ics_export.py"]
 
 [tool.ruff]
 line-length = 120

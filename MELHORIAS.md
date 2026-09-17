@@ -107,15 +107,38 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
-## 🔜 PRÓXIMO — Bloco 7 (itens restantes de UX/estrutura)
+## ✅ CONCLUÍDO — Bloco 7 (2026-09-17, commit pendente)
 
-- **M2.** Gráfico de KPIs ao longo do tempo (pandas já importado) —
-  adicionar à tab Cronograma & Métricas.
-- **M5.** Cronograma → export .ics (Google Calendar).
-- **P7.** Verificar modelos Gemini contra client.models.list() com a
-  chave real (lista pode conter modelos inexistentes).
-- **P8.** XSS latente: html.escape() na saída do LLM em render_idea_card
-  e render_schedule_day (st.markdown unsafe_allow_html=True).
+**M2 + M5 + P7 + P8 — Gráfico, calendário, modelos e XSS**
+
+- **M2. Gráfico de KPIs ao longo do tempo.** Tab Cronograma & Métricas:
+  line_chart (pandas) das taxas de salvamentos/envios/não-seguidores
+  por data de publicação, com caption das metas.
+- **M5. Export .ics.** Novo `ics_export.py`: cronograma → eventos
+  VCALENDAR com fuso SP fixo (-03:00), parse de datas ISO/pt-BR,
+  horários "19:30"/"18h"/"às 12h30", dia-de-semana isolado, escape e
+  fold de linha (RFC 5545), lembrete 30min. Botão de download na tab 6.
+  10 testes no test_ics_export.py.
+- **P7. Modelos validados contra a chave real.** `_modelos_disponiveis()`
+  no gemini.py: `@st.cache_data(ttl=3600)` filtra GEMINI_MODELS contra
+  `client.models.list()`; os dois loops de fallback usam a lista
+  validada. Offline/falha → lista estática como fallback.
+- **P8. XSS fechado.** Helper `_esc()` (html.escape) aplicado em TODOS
+  os pontos onde saída do LLM entra em st.markdown(unsafe_allow_html):
+  render_idea_card (título, tema, badges, público, KPI, CTA, score)
+  e render_schedule_day (dia, data, horário, canal, resumo, CTA).
+
+---
+
+## 🔜 PRÓXIMO — Bloco 8: o que sobrou
+
+- **E5.** prompts_automaticacao.txt trackeado E no .gitignore — decidir
+  (`git rm --cached` ou remover do ignore).
+- **E1.** Quebrar app.py (2.500 linhas) em tab_*.py + ui/styles.py
+  (janela sem uso do app).
+- **V1–V4.** Evoluções estratégicas: métricas via Instagram Graph API,
+  geração de imagem no app (Imagen), ciclo de vida por ideia, backup
+  export/import.
 
 ## 📋 BACKLOG
 

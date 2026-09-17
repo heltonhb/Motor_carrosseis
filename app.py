@@ -35,6 +35,7 @@ from config import (
     UNIDADE,
 )
 from gemini import call_gemini, call_gemini_json, invalidate_cache
+from ics_export import cronograma_para_ics
 from image_utils import add_text_overlay, create_slide_from_template
 from parser_nlm import extract_json
 from persistence import (
@@ -500,6 +501,12 @@ st.html("""
 
 # ─── Helpers de UI ────────────────────────────────────────────────────────────
 
+def _esc(texto) -> str:
+    """html.escape para qualquer valor que vem do LLM e entra em HTML (P8)."""
+    import html as _html
+    return _html.escape(str(texto or ""))
+
+
 def _api_key_ok() -> bool:
     """Verifica se há chave configurada sem expor o valor."""
     from gemini import _get_api_key  # noqa: PLC0415
@@ -614,47 +621,47 @@ def render_idea_card(idea: dict, idx: int) -> None:
     score_just = idea.get("score_justificativa", "")
 
     badges_html = [
-        f'<span style="background:rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.12); color:{color}; padding:3px 12px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.25); white-space:nowrap;">{eixo}</span>'
+        f'<span style="background:rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.12); color:{color}; padding:3px 12px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.25); white-space:nowrap;">{_esc(eixo)}</span>'
     ]
     if persona:
         badges_html.append(
-            f'<span style="background:rgba(255,209,102,0.12); color:#FFD166; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(255,209,102,0.25); white-space:nowrap;">🎯 {persona}</span>'
+            f'<span style="background:rgba(255,209,102,0.12); color:#FFD166; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(255,209,102,0.25); white-space:nowrap;">🎯 {_esc(persona)}</span>'
         )
     if tipo_hook:
         badges_html.append(
-            f'<span style="background:rgba(52,211,153,0.12); color:#34D399; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(52,211,153,0.25); white-space:nowrap;">⚡ {tipo_hook}</span>'
+            f'<span style="background:rgba(52,211,153,0.12); color:#34D399; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(52,211,153,0.25); white-space:nowrap;">⚡ {_esc(tipo_hook)}</span>'
         )
     if score:
         badges_html.append(
-            f'<span style="background:rgba(129,140,248,0.12); color:#818CF8; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(129,140,248,0.25); white-space:nowrap;">⭐ {score}/10 Retenção</span>'
+            f'<span style="background:rgba(129,140,248,0.12); color:#818CF8; padding:3px 10px; border-radius:16px; font-size:0.75em; font-weight:600; border:1px solid rgba(129,140,248,0.25); white-space:nowrap;">⭐ {_esc(score)}/10 Retenção</span>'
         )
 
     badges_str = "".join(badges_html)
 
     score_html = ""
     if score_just:
-        score_html = f'<div style="margin-top:10px; padding:6px 12px; background:rgba(255,255,255,0.03); border-left:2px solid {CORES["primaria"]}; font-size:0.78em; color:{CORES["texto_sec"]}; border-radius:0 4px 4px 0;"><strong>Estratégia de Retenção:</strong> {score_just}</div>'
+        score_html = f'<div style="margin-top:10px; padding:6px 12px; background:rgba(255,255,255,0.03); border-left:2px solid {CORES["primaria"]}; font-size:0.78em; color:{CORES["texto_sec"]}; border-radius:0 4px 4px 0;"><strong>Estratégia de Retenção:</strong> {_esc(score_just)}</div>'
 
     st.markdown(f"""
     <div class="idea-card">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-            <h3 style="margin:0; font-size:1.1rem; color:{CORES['primaria']};">{idea.get('titulo','Sem título')}</h3>
+            <h3 style="margin:0; font-size:1.1rem; color:{CORES['primaria']};">{_esc(idea.get('titulo','Sem título'))}</h3>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">{badges_str}</div>
         </div>
-        <p style="color:{CORES['texto_sec']}; margin-bottom:10px; font-size:0.88em; line-height:1.5;">{idea.get('tema','')}</p>
+        <p style="color:{CORES['texto_sec']}; margin-bottom:10px; font-size:0.88em; line-height:1.5;">{_esc(idea.get('tema',''))}</p>
         <div style="display:flex; flex-wrap:wrap; gap:20px;">
             <div>
                 <div style="font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; color:{CORES['texto_sec']}; margin-bottom:2px; font-weight:600;">Público</div>
-                <div style="color:{CORES['texto']}; font-size:0.88em;">{idea.get('publico_alvo','')}</div>
+                <div style="color:{CORES['texto']}; font-size:0.88em;">{_esc(idea.get('publico_alvo',''))}</div>
             </div>
             <div>
                 <div style="font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; color:{CORES['texto_sec']}; margin-bottom:2px; font-weight:600;">KPI Alvo</div>
-                <div style="color:{color}; font-weight:600; font-size:0.88em;">{idea.get('kpi_alvo','')}</div>
+                <div style="color:{color}; font-weight:600; font-size:0.88em;">{_esc(idea.get('kpi_alvo',''))}</div>
             </div>
             <div>
                 <div style="font-size:0.72em; text-transform:uppercase; letter-spacing:0.06em; color:{CORES['texto_sec']}; margin-bottom:2px; font-weight:600;">CTA</div>
                 <div style="color:{CORES['primaria']}; font-weight:600; font-size:0.88em;">
-                    Comente "{idea.get('cta','')}"
+                    Comente "{_esc(idea.get('cta',''))}"
                 </div>
             </div>
         </div>
@@ -697,19 +704,19 @@ def render_schedule_day(day: dict) -> None:
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <div>
                 <strong style="color:{CORES['primaria']};">
-                    {icon} {day.get('dia','')} — {day.get('data','')}
+                    {icon} {_esc(day.get('dia',''))} — {_esc(day.get('data',''))}
                 </strong>
-                <span style="color:{CORES['texto_sec']}; margin-left:8px; font-size:0.85em;">{day.get('horario','')}</span>
+                <span style="color:{CORES['texto_sec']}; margin-left:8px; font-size:0.85em;">{_esc(day.get('horario',''))}</span>
             </div>
             <span style="background:rgba({int(canal_color[1:3],16)},{int(canal_color[3:5],16)},{int(canal_color[5:7],16)},0.12); color:{canal_color};
                   padding:2px 10px; border-radius:12px; font-size:0.75em;
-                  font-weight:500; border:1px solid rgba({int(canal_color[1:3],16)},{int(canal_color[3:5],16)},{int(canal_color[5:7],16)},0.25); white-space:nowrap;">{canal}</span>
+                  font-weight:500; border:1px solid rgba({int(canal_color[1:3],16)},{int(canal_color[3:5],16)},{int(canal_color[5:7],16)},0.25); white-space:nowrap;">{_esc(canal)}</span>
         </div>
         <p style="color:{CORES['texto']}; margin:8px 0 4px 0; font-size:0.88em; line-height:1.5;">
-            {day.get('conteudo_resumo','')}
+            {_esc(day.get('conteudo_resumo',''))}
         </p>
         <p style="color:{CORES['texto_sec']}; margin:0; font-size:0.82em;">
-            📌 CTA: {day.get('cta','—')}
+            📌 CTA: {_esc(day.get('cta','—'))}
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1532,6 +1539,19 @@ with tab6:
             mime="application/json",
         )
 
+        # ── M5: export .ics para Google Calendar ───────────────────────────
+        ics_texto, n_eventos = cronograma_para_ics(cron)
+        if n_eventos > 0:
+            st.download_button(
+                "📅 Exportar Cronograma (.ics — Google Calendar)",
+                data=ics_texto,
+                file_name="cronograma_carrosseis.ics",
+                mime="text/calendar",
+                help=f"{n_eventos} eventos com lembrete 30min antes. Importe no Google Calendar: Configurações → Importar e exportar.",
+            )
+        else:
+            st.caption("⚠️ Nenhuma data reconhecida no cronograma — .ics indisponível.")
+
     # ── Registro de Métricas ─────────────────────────────────────────────────
     st.divider()
     st.markdown("### 📊 Registrar Métricas de Post")
@@ -1598,6 +1618,28 @@ with tab6:
         st.markdown("### 📋 Histórico de Métricas")
         df = pd.DataFrame(st.session_state["historico_metricas"])
         st.dataframe(df, use_container_width=True)
+
+        # ── M2: gráfico de KPIs ao longo do tempo ──────────────────────────
+        st.markdown("### 📈 KPIs ao Longo do Tempo")
+        df_plot = df.copy()
+        # ordena por data e usa só colunas de taxa (0–100%)
+        for col in ("taxa_salvamentos", "taxa_envios", "taxa_nao_seguidores"):
+            if col not in df_plot.columns:
+                df_plot[col] = 0.0
+        df_plot["data"] = pd.to_datetime(df_plot["data"], errors="coerce")
+        df_plot = df_plot.sort_values("data")
+        st.line_chart(
+            df_plot.set_index("data")[[
+                "taxa_salvamentos", "taxa_envios", "taxa_nao_seguidores",
+            ]].rename(columns={
+                "taxa_salvamentos": "💾 Salvamentos (%)",
+                "taxa_envios": "📤 Envios DM (%)",
+                "taxa_nao_seguidores": "🆕 Não Seguidores (%)",
+            }),
+            height=320,
+        )
+        st.caption("Metas: Salvamentos ≥ 4% · Envios DM ≥ 2,5% · Não seguidores ≥ 20%")
+
         st.download_button(
             "⬇️ Exportar Métricas (JSON)",
             data=json.dumps(st.session_state["historico_metricas"], ensure_ascii=False, indent=2),

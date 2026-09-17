@@ -33,6 +33,29 @@ GEMINI_MODELS = [
 ]
 
 
+@st.cache_data(ttl=3600)  # valida a lista 1x por hora (P7)
+def _modelos_disponiveis() -> tuple[str, ...]:
+    """
+    Retorna os nomes de modelos realmente disponíveis para ESTA chave.
+    Filtra GEMINI_MODELS contra client.models.list() — evita warning +
+    latência em cada chamada quando a lista contém modelo inexistente.
+    Fallback: se a listagem falhar (rede/offline), devolve a lista estática.
+    """
+    try:
+        client = _get_client()
+        if client is None:
+            return tuple(GEMINI_MODELS)
+        nomes = {m.name.removeprefix("models/") for m in client.models.list() if m.name}
+        validos = [m for m in GEMINI_MODELS if m in nomes]
+        if validos:
+            return tuple(validos)
+        # nenhum dos nomes bateu — mantém lista estática como fallback
+        return tuple(GEMINI_MODELS)
+    except Exception as exc:  # rede indisponível, chave inválida etc.
+        logger.warning("models.list() falhou (%s); usando lista estática", exc)
+        return tuple(GEMINI_MODELS)
+
+
 def _get_api_key() -> str:
     """
     Busca a chave API na seguinte ordem de prioridade:
@@ -107,7 +130,7 @@ def call_gemini(prompt: str, context: str = "", max_retries: int = 3, temperatur
 
     full_prompt = f"{prompt}\n\n{context}" if context else prompt
 
-    for model_name in GEMINI_MODELS:
+    for model_name in _modelos_disponiveis():
         for attempt in range(max_retries):
             try:
                 response = client.models.generate_content(
@@ -185,7 +208,7 @@ def call_gemini_json(
 
     full_prompt = f"{prompt}\n\n{context}" if context else prompt
 
-    for model_name in GEMINI_MODELS:
+    for model_name in _modelos_disponiveis():
         for attempt in range(max_retries):
             try:
                 response = client.models.generate_content(
