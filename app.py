@@ -1093,10 +1093,10 @@ with tab3:
                     f"Slides:\n{json.dumps(ideia.get('slides_sugeridos',[]), ensure_ascii=False)}"
                 )
                 # Guarda com índice para não sobrescrever prompts de outras ideias (P3)
-                idx_prompts = len(st.session_state.get("prompts_lote", []))
                 with st.spinner("🤖 Gerando prompts de imagem…"):
                     dados = call_gemini_json(PROMPT_PROMPTS_IMAGEM, ctx, temperature=TEMPERATURAS["prompts_imagem"])
                     if dados:
+                        titulo = ideia.get("titulo", "Ideia")
                         st.session_state.setdefault("prompts_lote", []).append({"titulo": titulo, "prompts": dados})
                         save_geracao("prompts", {"titulo": titulo, "prompts": dados})
                         st.success("✅ Prompts gerados!")
