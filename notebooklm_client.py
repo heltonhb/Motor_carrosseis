@@ -7,7 +7,10 @@ import shutil
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 from typing import Optional
+
+import streamlit as st
 
 
 # Catálogo oficial de cursos da Ensina Mais Tatuapé. Todo conteúdo DEVE orbitar
@@ -103,6 +106,7 @@ def _run_cmd(cmd: Optional[list], timeout: int = 120) -> tuple:
         return "", str(e), 1
 
 
+@st.cache_data(ttl=300)  # cache de 5 minutos
 def list_notebooks(profile: str = "default") -> list:
     """Lista todos os notebooks disponíveis."""
     cmd = _nlm_cmd("list", "--json", profile=profile)

@@ -26,7 +26,8 @@ from config import (
     NOTEBOOK_TITULO_PADRAO,
     UNIDADE,
 )
-from gemini import call_gemini, call_gemini_json, extract_json, invalidate_cache
+from gemini import call_gemini, call_gemini_json, invalidate_cache
+from parser_nlm import extract_json
 from image_utils import add_text_overlay, create_slide_from_template, generate_all_slides
 from persistence import (
     save_geracao,

@@ -39,12 +39,19 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
   não parseia JSON e o app usa o fallback (divide parágrafos), agora
   exibe `⚠️ Fallback: ideias genéricas criadas a partir do texto (não foram extraídas diretamente do NotebookLM).`
 
+## ✅ CONCLUÍDO — Bloco 3 (2026-09-17, commit XXX)
+
+**P5 + P6 — Confiabilidade técnica**
+
+- **P5. Parser JSON unificado.** Criação de `parser_nlm.py` com `extract_json()` e `extract_json_list()`, centralizando toda lógica de parsing. Atualizadas as importações em `app.py` e `gemini.py`.
+- **P6. Cache no Tab NotebookLM.** Adicionado `@st.cache_data(ttl=300)` a `list_notebooks()` (cache de 5 minutos).
+
 ---
 
-## 🔜 PRÓXIMO — Bloco 3: P5 + P6
+## 🔜 PRÓXIMO — Bloco 4: E1 + E2
 
-- **P5. Parser duplicado.** `extract_json` (gemini.py) vs bloco inline no app.py (tab 2). Unificar num único módulo (ex. `parser_nlm.py`).
-- **P6. Cache no Tab NotebookLM.** Dispara subprocess NLM a cada rerun — falta `@st.cache_data(ttl=...)` em `check_auth()`/`list_notebooks()`.
+- **E1. Refatorar app.py (2.300+ linhas).** Quebrar em `tab_<nome>.py`, `ui/styles.py`, `services/parser_nlm.py`.
+- **E2. Eliminar duplicação Lote (tab 7) e Pipeline (tab 8).** São o mesmo orquestrador duplicado.
 
 ## 📋 BACKLOG
 
