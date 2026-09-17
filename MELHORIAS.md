@@ -27,18 +27,24 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 - Testes: `test_image_fix.py` (passando) — fonte auto-reduzida, corte
   sinalizado, overlay quebrado em linhas, 3 slides do fluxo real.
 
+## ✅ CONCLUÍDO — Bloco 2 (2026-09-17, commit XXX)
+
+**P3 + P4 — Evitar perda de dados e avisos claros**
+
+- **P3. Prompts e legendas não sobrescrevem mais.** Agora todas as
+  gerações individuais (tab 3/4) e pipeline (tab 8) armazenam resultados
+  em `session_state["prompts_lote"]` e `session_state["legendas_lote"]`
+  (listas com índice), igual ao Lote já fazia com `results[f"prompts_{idx}"]`.
+- **P4. Aviso de fallback quando ideias são fabricadas.** Quando o NLM
+  não parseia JSON e o app usa o fallback (divide parágrafos), agora
+  exibe `⚠️ Fallback: ideias genéricas criadas a partir do texto (não foram extraídas diretamente do NotebookLM).`
+
 ---
 
-## 🔜 PRÓXIMO — Bloco 2: P3 + P4
+## 🔜 PRÓXIMO — Bloco 3: P5 + P6
 
-- **P3. Prompts e legendas se sobrescrevem.** `session_state["prompts"]`
-  e `["legendas"]` são slot único: gerar da ideia B apaga os da ideia A.
-  Corrigir: guardar por chave da ideia (ex. `prompts[titulo_ideia]`),
-  como o Lote já faz com `results[f"prompts_{idx}"]`.
-- **P4. Fabricação silenciosa de ideias.** app.py ~950–974: quando o
-  NLM não parseia, o app divide parágrafos e fabrica 6 "ideias" com
-  eixo por `i%3` — apresentadas como vindas do NotebookLM. No mínimo:
-  avisar "⚠️ fallback: ideias genéricas, não ancoradas no notebook".
+- **P5. Parser duplicado.** `extract_json` (gemini.py) vs bloco inline no app.py (tab 2). Unificar num único módulo (ex. `parser_nlm.py`).
+- **P6. Cache no Tab NotebookLM.** Dispara subprocess NLM a cada rerun — falta `@st.cache_data(ttl=...)` em `check_auth()`/`list_notebooks()`.
 
 ## 📋 BACKLOG
 

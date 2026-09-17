@@ -972,6 +972,7 @@ with tab2:
                         "justificativa": "Extraído diretamente da análise do NotebookLM",
                         "fonte_notebook": "Estratégia Ensina Mais Tatuapé",
                     })
+                st.warning("⚠️ Fallback: ideias genéricas criadas a partir do texto (não foram extraídas diretamente do NotebookLM).")
 
             # Garantir campos padrão em todas
             for ideia in ideias_formatadas:
@@ -1090,15 +1091,18 @@ with tab3:
                     f"Carrossel:\n{json.dumps(ideia, ensure_ascii=False)}\n\n"
                     f"Slides:\n{json.dumps(ideia.get('slides_sugeridos',[]), ensure_ascii=False)}"
                 )
+                # Guarda com índice para não sobrescrever prompts de outras ideias (P3)
+                idx_prompts = len(st.session_state.get("prompts_lote", []))
                 with st.spinner("🤖 Gerando prompts de imagem…"):
                     dados = call_gemini_json(PROMPT_PROMPTS_IMAGEM, ctx, temperature=TEMPERATURAS["prompts_imagem"])
                     if dados:
-                        st.session_state["prompts"] = dados
-                        save_geracao("prompts", dados)
+                        st.session_state.setdefault("prompts_lote", []).append({"titulo": titulo, "prompts": dados})
+                        save_geracao("prompts", {"titulo": titulo, "prompts": dados})
                         st.success("✅ Prompts gerados!")
 
-        if st.session_state.get("prompts"):
-            prompts = st.session_state["prompts"]
+        if st.session_state.get("prompts_lote"):
+            prompts_items = st.session_state["prompts_lote"]
+            prompts = prompts_items[-1]["prompts"] if prompts_items else {}
 
             # Paleta de cores
             paleta = prompts.get("paleta_cores", {})
@@ -1334,12 +1338,13 @@ with tab5:
                 with st.spinner("🤖 Gerando 3 opções de legenda…"):
                     dados = call_gemini_json(PROMPT_LEGENDAS, ctx, temperature=TEMPERATURAS["legendas"])
                     if dados:
-                        st.session_state["legendas"] = dados
+                        st.session_state.setdefault("legendas_lote", []).append(dados)
                         save_geracao("legendas", dados)
                         st.success("✅ 3 legendas geradas!")
 
-        if st.session_state.get("legendas"):
-            legendas_data = st.session_state["legendas"]
+        if st.session_state.get("legendas_lote"):
+            legendas_items = st.session_state["legendas_lote"]
+            legendas_data = legendas_items[-1] if legendas_items else {}
             opcao_icons = {1: "🔴", 2: "🟡", 3: "🟢"}
 
             for leg in legendas_data.get("legendas", []):
@@ -1887,7 +1892,7 @@ with tab8:
                     )
                     prompts_data = call_gemini_json(PROMPT_PROMPTS_IMAGEM, ctx, temperature=TEMPERATURAS["prompts_imagem"])
                     if prompts_data:
-                        st.session_state["prompts"] = prompts_data
+                        st.session_state.setdefault("prompts_lote", []).append(prompts_data)
                         save_geracao("prompts", prompts_data)
 
                     step += 1
@@ -1900,7 +1905,7 @@ with tab8:
                     ctx = f"Carrossel:\n{json.dumps(first_idea, ensure_ascii=False)}"
                     legendas_data = call_gemini_json(PROMPT_LEGENDAS, ctx, temperature=TEMPERATURAS["legendas"])
                     if legendas_data:
-                        st.session_state["legendas"] = legendas_data
+                        st.session_state.setdefault("legendas_lote", []).append(legendas_data)
                         save_geracao("legendas", legendas_data)
 
                     step += 1
