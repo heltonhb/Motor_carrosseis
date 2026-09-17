@@ -4,7 +4,6 @@ templates.py — Templates pré-definidos de carrossel e dataclasses.
 
 from dataclasses import dataclass, field
 
-
 # ─── Dataclasses ─────────────────────────────────────────────────────────────
 
 @dataclass

@@ -8,20 +8,19 @@ Migração v2 (SDK nativo):
 - Cache via st.session_state preservado
 """
 
+import hashlib
 import json
+import logging
+import os
 import re
 import time
-import hashlib
-import os
-import logging
 
+import streamlit as st
 from google import genai
 from google.genai import types
 
-import streamlit as st
-
-from prompts import SYSTEM_INSTRUCTION_PERSONA
 from parser_nlm import extract_json
+from prompts import SYSTEM_INSTRUCTION_PERSONA
 
 logger = logging.getLogger(__name__)
 
@@ -275,12 +274,12 @@ def _clean_json_string(s: str) -> str:
         content = match.group(0)
         # Substitui quebras de linha por espaço dentro da string
         return content.replace("\n", " ").replace("\r", " ")
-    
+
     # Padrão para strings JSON: "texto com possíveis quebras"
     s = re.sub(r'"[^"\\]*(?:\\.[^"\\]*)*"', fix_newlines_in_strings, s)
-    
+
     # Remove caracteres de controle restantes que possam quebrar o JSON
     s = re.sub(r"[\x00-\x1f\x7f]", " ", s)
-    
+
     return s
 

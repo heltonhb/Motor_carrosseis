@@ -43,7 +43,8 @@ print(f"[P1] slide renderizado 1080x1350, info={info}")
 
 # ── P2: overlay com texto que antes sangrava da imagem ─────────────────────
 base = Image.new("RGB", (1080, 1350), (27, 42, 74))
-buf = BytesIO(); base.save(buf, format="PNG")
+buf = BytesIO()
+base.save(buf, format="PNG")
 overlay_text = (
     "Você sabia que a maior dificuldade dos alunos do 6º ano não é "
     "matemática, mas sim a base que ficou para trás no Ensino Fundamental I?"

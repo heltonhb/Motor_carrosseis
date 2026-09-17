@@ -16,7 +16,6 @@ from typing import Any
 
 from config import DATA_DIR, HISTORICO_FILE, METRICAS_FILE
 
-
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
 def ensure_data_dir() -> None:
@@ -31,7 +30,7 @@ def _read_json(filepath: str) -> Any:
     if not os.path.exists(filepath):
         return None
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return None

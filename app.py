@@ -6,6 +6,7 @@ ideias estratégicas, prompts para Google Flow, geração de imagens e cronogram
 
 # ─── Imports (todos no topo) ──────────────────────────────────────────────────
 import json
+import re
 import time
 import zipfile
 from datetime import datetime
@@ -13,8 +14,14 @@ from io import BytesIO
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
+import notebooklm_client as nlm
+from batch_engine import (
+    gerar_cronograma,
+    gerar_legendas_ideia,
+    gerar_prompts_ideia,
+    processar_lote,
+)
 from config import (
     CORES,
     EIXOS,
@@ -27,22 +34,14 @@ from config import (
     UNIDADE,
 )
 from gemini import call_gemini, call_gemini_json, invalidate_cache
-from parser_nlm import extract_json
-from batch_engine import (
-    gerar_cronograma,
-    gerar_legendas_ideia,
-    gerar_prompts_ideia,
-    gerar_slides_ideia,
-    processar_lote,
-)
 from image_utils import add_text_overlay, create_slide_from_template
+from parser_nlm import extract_json
 from persistence import (
     save_geracao,
     save_metrica,
     sync_session_from_disk,
 )
 from prompts import (
-    PROMPT_IDEIAS,
     PROMPT_TENDENCIAS,
     PROMPT_VIDEO_CURTO,
     TEMPERATURAS,
@@ -51,7 +50,6 @@ from prompts import (
     validate_idea_diversity,
 )
 from templates import TEMPLATES, MetricaPost, eixo_para_template
-import notebooklm_client as nlm
 
 # ─── Configuração da página ───────────────────────────────────────────────────
 st.set_page_config(
@@ -863,19 +861,18 @@ with tab2:
     if "nb_result" in st.session_state and st.session_state.get("nb_result"):
         st.markdown("### 📋 Usar Ideias do NotebookLM")
         st.info("💡 Você tem ideias prontas do NotebookLM. Use-as diretamente sem precisar gerar novas ideias.")
-        
+
         if st.button("📤 Usar Ideias do NotebookLM", type="primary", use_container_width=True):
             # Converter o resultado do NotebookLM para formato de ideias
             nb_result = st.session_state["nb_result"]
-            
-            import re
+
             ideias_formatadas = []
-            
+
             # Estratégia 0: Usar extract_json direto
             data = extract_json(nb_result)
             if data and "ideias" in data:
                 ideias_formatadas = data["ideias"]
-            
+
             # Estratégia 1: Extrair JSON do bloco de código ```json ... ```
             if not ideias_formatadas:
                 json_match = re.search(r'```json\s*(\{.*?\})\s*```', nb_result, re.DOTALL)
@@ -886,7 +883,7 @@ with tab2:
                             ideias_formatadas = data["ideias"]
                     except json.JSONDecodeError:
                         pass
-            
+
             # Estratégia 3: Extrair de Markdown com ## Ideia ou ### Ideia ou 1. Ideia
             if not ideias_formatadas:
                 # Tenta vários padrões de divisão de tópicos
@@ -900,29 +897,29 @@ with tab2:
                     if len(matches) >= 2:
                         blocos = matches
                         break
-                
+
                 if blocos:
                     for i, b_text in enumerate(blocos):
                         # Tenta achar título
                         t_match = re.search(r"(?:\*\*Título:?\*\*|Título:?)\s*(.+)", b_text, re.IGNORECASE)
                         if not t_match:
                             t_match = re.search(r"^\s*(?:#+\s*|\d+\.\s*)?\*?\*?([^\n*]+)\*?\*?", b_text)
-                        
+
                         titulo = t_match.group(1).strip() if t_match else f"Ideia {i+1}"
                         titulo = re.sub(r"^Ideia\s*\d*[:\-]\s*", "", titulo, flags=re.IGNORECASE).strip()
-                        
+
                         # Eixo
                         e_match = re.search(r"(?:\*\*Eixo:?\*\*|Eixo:?)\s*(Didático|Comportamental|Diagnóstico)", b_text, re.IGNORECASE)
                         eixo = e_match.group(1).capitalize() if e_match else ("Didático" if i % 3 == 0 else "Comportamental" if i % 3 == 1 else "Diagnóstico")
-                        
+
                         # Tema
                         tema_match = re.search(r"(?:\*\*Tema:?\*\*|Tema:?)\s*(.+)", b_text, re.IGNORECASE)
                         tema = tema_match.group(1).strip() if tema_match else titulo
-                        
+
                         # CTA
                         cta_match = re.search(r"(?:\*\*CTA:?\*\*|CTA:?)\s*`?([A-Z_0-9]+)`?", b_text, re.IGNORECASE)
                         cta = cta_match.group(1).strip() if cta_match else "DESAFIO"
-                        
+
                         # Slides sugeridos
                         slides_sugeridos = []
                         slides_matches = re.findall(r"(?:Slide\s*\d*|Slide\s*\d*[:\-]|(?:\d+\.))\s*\*\*([^*]+)\*\*:?\s*(.+)", b_text, re.IGNORECASE)
@@ -939,7 +936,7 @@ with tab2:
                                 {"slide": 7, "tipo": "Método", "texto": "Ensina Mais Tatuapé: apoio focado na necessidade de cada estudante."},
                                 {"slide": 8, "tipo": "CTA", "texto": f"Comente {cta} ou fale no WhatsApp (11) 94475-0009 para agendar uma avaliação gratuita."},
                             ]
-                        
+
                         ideias_formatadas.append({
                             "titulo": titulo,
                             "eixo": eixo,
@@ -955,10 +952,10 @@ with tab2:
 
             # Estratégia 4: Se o NotebookLM retornou texto corrido com ideias, monta 6 ideias dividindo em tópicos
             if not ideias_formatadas and len(nb_result.strip()) > 100:
-                linhas = [l.strip() for l in nb_result.split("\n") if l.strip() and not l.startswith("#")]
+                linhas = [ln.strip() for ln in nb_result.split("\n") if ln.strip() and not ln.startswith("#")]
                 paragrafos = [p for p in nb_result.split("\n\n") if len(p.strip()) > 30]
                 fonte_base = paragrafos if len(paragrafos) >= 3 else linhas
-                
+
                 for idx, bloco in enumerate(fonte_base[:6]):
                     resumo = bloco[:80].strip().rstrip(".")
                     ideias_formatadas.append({
@@ -999,7 +996,7 @@ with tab2:
                 st.rerun()
             else:
                 st.warning("⚠️ Não foi possível identificar ideias no texto do notebook.")
-        
+
         st.divider()
 
     # ── Geração livre ────────────────────────────────────────────────────────
@@ -1404,8 +1401,8 @@ with tab5:
                 )
             with c2:
                 txt_legs = "\n\n---\n\n".join(
-                    f"OPÇÃO {l.get('opcao','?')} — {l.get('estilo','')}\n\n{l.get('legenda_completa','')}"
-                    for l in legendas_data.get("legendas", [])
+                    f"OPÇÃO {leg.get('opcao','?')} — {leg.get('estilo','')}\n\n{leg.get('legenda_completa','')}"
+                    for leg in legendas_data.get("legendas", [])
                 )
                 st.download_button(
                     "⬇️ Exportar .txt",
@@ -1616,7 +1613,7 @@ with tab7:
             prompts_items = {k: v for k, v in results.items() if k.startswith("prompts_")}
             if prompts_items:
                 st.markdown("#### 🎨 Prompts Gerados")
-                for key, item in prompts_items.items():
+                for _key, item in prompts_items.items():
                     with st.expander(f"📋 {item['titulo']}", expanded=False):
                         for slide in item["prompts"].get("slides", []):
                             sn = slide.get("slide_num", "?")
@@ -1625,7 +1622,7 @@ with tab7:
                             clipboard_button(
                                 slide.get("prompt_en", ""),
                                 f"📋 Copiar Slide {sn}",
-                                key=f"clip_lote_{key}_{sn}",
+                                key=f"clip_lote_{_key}_{sn}",
                             )
                             st.markdown(f"📝 `{slide.get('text_overlay','')}`")
                             st.divider()
@@ -1634,7 +1631,7 @@ with tab7:
             slides_items = {k: v for k, v in results.items() if k.startswith("slides_")}
             if slides_items:
                 st.markdown("#### 🖼️ Slides Gerados")
-                for key, item in slides_items.items():
+                for _key, item in slides_items.items():
                     with st.expander(f"🎠 {item['titulo']}", expanded=False):
                         for sn, sb, _info in item["images"]:
                             st.image(sb, caption=f"Slide {sn}")
@@ -1654,13 +1651,13 @@ with tab7:
             if st.button("📥 Exportar Lote Completo (ZIP)", use_container_width=True):
                 zip_buf = BytesIO()
                 with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for key, item in prompts_items.items():
+                    for _key, item in prompts_items.items():
                         fname = item["titulo"][:50].replace(" ", "_")
                         zf.writestr(
                             f"prompts/{fname}.json",
                             json.dumps(item["prompts"], ensure_ascii=False, indent=2),
                         )
-                    for key, item in slides_items.items():
+                    for _key, item in slides_items.items():
                         folder = item["titulo"][:30].replace(" ", "_")
                         for sn, sb, _info in item["images"]:
                             zf.writestr(f"slides/{folder}/slide_{sn}.png", sb)
@@ -1766,7 +1763,7 @@ with tab8:
         with st.sidebar:
             st.markdown("---")
             st.markdown("## 🔬 NotebookLM")
-            st.markdown(f"**Notebook ativo:**")
+            st.markdown("**Notebook ativo:**")
             st.info(f"📚 {notebook_titulo}")
             st.caption(f"ID: {selected_nb_id[:12]}...")
 
@@ -1806,7 +1803,7 @@ with tab8:
                 pipeline_ok = True
 
                 # ── Etapa 1: Pesquisa no NotebookLM ──────────────────────────
-                status.info("📚 **[1/{0}]** Pesquisando tendências no NotebookLM…".format(total_steps))
+                status.info(f"📚 **[1/{total_steps}]** Pesquisando tendências no NotebookLM…")
                 nlm_context = ""
                 try:
                     nlm_trends = nlm.get_trends(selected_nb_id)
@@ -1842,7 +1839,7 @@ with tab8:
 
                 # ── Etapa 2: Gerar Ideias via Gemini (com contexto NLM) ──────
                 if pipeline_ok:
-                    status.info("💡 **[{0}/{1}]** Gerando 6 ideias estratégicas…".format(step + 1, total_steps))
+                    status.info(f"💡 **[{step + 1}/{total_steps}]** Gerando 6 ideias estratégicas…")
                     ideas_context = f"Tendências:\n{json.dumps(trends_data, ensure_ascii=False)}"
                     if nlm_context:
                         ideas_context += f"\n\nPesquisa NotebookLM:\n{nlm_context[:3000]}"
@@ -1864,9 +1861,7 @@ with tab8:
 
                 # ── Etapa 3: Prompts de Imagem (opcional) ────────────────────
                 if pipeline_ok and pip_prompts:
-                    status.info("🎨 **[{0}/{1}]** Gerando prompts visuais para {2} ideias…".format(
-                        step + 1, total_steps, len(ideias_formatadas)
-                    ))
+                    status.info(f"🎨 **[{step + 1}/{total_steps}]** Gerando prompts visuais para {len(ideias_formatadas)} ideias…")
                     # Gerar prompts para a primeira ideia selecionada
                     first_idea = ideias_formatadas[0]
                     prompts_data = gerar_prompts_ideia(first_idea)
@@ -1879,7 +1874,7 @@ with tab8:
 
                 # ── Etapa 4: Legendas (opcional) ─────────────────────────────
                 if pipeline_ok and pip_legendas:
-                    status.info("📝 **[{0}/{1}]** Gerando legendas Instagram…".format(step + 1, total_steps))
+                    status.info(f"📝 **[{step + 1}/{total_steps}]** Gerando legendas Instagram…")
                     first_idea = ideias_formatadas[0]
                     legendas_data = gerar_legendas_ideia(first_idea)
                     if legendas_data:
@@ -1891,7 +1886,7 @@ with tab8:
 
                 # ── Etapa 5: Cronograma (opcional) ───────────────────────────
                 if pipeline_ok and pip_cronograma:
-                    status.info("📅 **[{0}/{1}]** Montando cronograma de 2 semanas…".format(step + 1, total_steps))
+                    status.info(f"📅 **[{step + 1}/{total_steps}]** Montando cronograma de 2 semanas…")
                     cron_data = gerar_cronograma(ideias_formatadas)
                     if cron_data:
                         st.session_state["cronograma"] = cron_data
@@ -1937,7 +1932,7 @@ with tab8:
         # CONSULTA MANUAL (funcionalidade original preservada)
         # ══════════════════════════════════════════════════════════════════════
         st.markdown("### 🔍 Consulta Manual")
-        
+
         col1, col2 = st.columns(2)
         with col1:
             consulta_tipo = st.radio(
@@ -1945,7 +1940,7 @@ with tab8:
                 ["📈 Tendências do Setor", "💡 Ideias de Carrossel", "🏢 Análise de Concorrência", "❓ Pergunta Livre"],
                 key="nb_consulta_tipo"
             )
-        
+
         with col2:
             if consulta_tipo == "❓ Pergunta Livre":
                 pergunta_livre = st.text_area(
@@ -2005,7 +2000,7 @@ with tab8:
 
                 with st.status("🔍 Consultando NotebookLM…", expanded=True) as status_ctx:
                     config = consulta_config[consulta_tipo]
-                    
+
                     # Preparar argumentos
                     prompt_args = config["args"].copy()
                     if consulta_tipo == "❓ Pergunta Livre":
@@ -2048,7 +2043,7 @@ with tab8:
                 if result:
                     # Salvar resultado bruto para exibição
                     st.session_state["nb_result"] = result
-                    
+
                     # Processar resultado baseado no tipo
                     data_parsed = extract_json(result)
                     if not data_parsed:
@@ -2056,11 +2051,11 @@ with tab8:
                             data_parsed = json.loads(result)
                         except Exception:
                             data_parsed = {}
-                    
+
                     # Persistir resultados estruturados para uso em outras abas
                     if config["result_key"] and isinstance(data_parsed, dict) and config["result_key"] in data_parsed:
                         key_data = data_parsed[config["result_key"]]
-                        
+
                         if config["result_key"] == "ideias":
                             ideias_list = key_data
                             ideias_formatadas = [_format_ideia(i) for i in ideias_list]
@@ -2068,13 +2063,13 @@ with tab8:
                             st.session_state["ideias_selecionadas"] = ideias_formatadas
                             save_geracao("ideias", {"ideias": ideias_formatadas})
                             st.success(f"✅ Consulta concluída! {len(ideias_formatadas)} ideias foram enviadas para a aba '{config['tab_name']}'.")
-                            
+
                         elif config["result_key"] == "tendencias":
                             st.session_state["tendencias"] = key_data
                             st.session_state["tendencias_texto"] = json.dumps(key_data, ensure_ascii=False)
                             save_geracao("tendencias", key_data)
                             st.success(f"✅ Consulta concluída! Dados enviados para a aba '{config['tab_name']}'.")
-                            
+
                         else:
                             # Para outros tipos, salvar genéricamente
                             st.session_state[config["result_key"]] = key_data
@@ -2089,10 +2084,10 @@ with tab8:
         # Exibir resultado
         if "nb_result" in st.session_state and st.session_state["nb_result"]:
             result = st.session_state["nb_result"]
-            
+
             # Tentar parsear como JSON estruturado usando extract_json
             data = extract_json(result)
-            
+
             # Se não conseguiu parsear como JSON direto, tenta json.loads
             if not data:
                 try:
@@ -2123,17 +2118,17 @@ with tab8:
                         with st.expander(f"💔 {d.get('dor', '')}"):
                             st.markdown(f"**Frequência:** {d.get('frequencia', '')}")
                             st.markdown(f"**Oportunidade:** {d.get('oportunidade', '')}")
-                
+
                 # Exibir oportunidades
                 if "oportunidades" in data:
                     st.markdown("### 🎯 Oportunidades")
                     for o in data["oportunidades"]:
                         st.success(f"**{o.get('oportunidade', '')}** → {o.get('acao_sugerida', '')}")
-                
+
                 # Exibir ideias
                 if "ideias" in data:
                     st.markdown("### 💡 Ideias Geradas")
-                    
+
                     # Botões de ação para enviar ideias
                     col_act1, col_act2 = st.columns(2)
                     with col_act1:
@@ -2143,14 +2138,14 @@ with tab8:
                             st.session_state["ideias_selecionadas"] = ideias_formatadas
                             save_geracao("ideias", {"ideias": ideias_formatadas})
                             st.success(f"✅ {len(ideias_formatadas)} ideias salvas! Abra a aba '💡 Ideias' para visualizar.")
-                    
+
                     with col_act2:
                         if st.button("🎨 Enviar para Gerador de Prompts", use_container_width=True):
                             ideias_formatadas = [_format_ideia(i) for i in data["ideias"]]
                             st.session_state["ideias_selecionadas"] = ideias_formatadas
                             st.session_state["nb_ideias_para_prompts"] = True
                             st.success(f"✅ {len(ideias_formatadas)} ideias enviadas para Prompts!")
-                    
+
                     # Exibir cada ideia
                     for i, ideia in enumerate(data["ideias"]):
                         with st.expander(f"{'🔴' if i==0 else '🟡' if i==1 else '🟢'} {ideia.get('titulo', '')}"):
@@ -2159,15 +2154,15 @@ with tab8:
                             st.markdown(f"**Público:** {ideia.get('publico_alvo', 'Pais de classes A/B do Tatuapé')}")
                             st.markdown(f"**CTA:** `{ideia.get('cta', '')}`")
                             st.markdown(f"**Fonte Notebook:** {ideia.get('fonte_notebook', '')}")
-                            
+
                             # Botão para enviar ideia individual
-                            if st.button(f"📤 Enviar para Prompts", key=f"send_idea_{i}"):
+                            if st.button("📤 Enviar para Prompts", key=f"send_idea_{i}"):
                                 ideia_formatada = _format_ideia(ideia)
                                 if "ideias_selecionadas" not in st.session_state:
                                     st.session_state["ideias_selecionadas"] = []
                                 st.session_state["ideias_selecionadas"].append(ideia_formatada)
                                 st.success(f"✅ '{ideia.get('titulo', '')}' enviada para Prompts!")
-                
+
                 # Exibir análise de concorrência
                 if "concorrentes" in data:
                     st.markdown("### 🏢 Análise de Concorrência")
@@ -2176,7 +2171,7 @@ with tab8:
                             st.markdown(f"**O que faz:** {c.get('o_que_faz', '')}")
                             st.markdown(f"**Pontos fortes:** {c.get('pontos_fortes', '')}")
                             st.markdown(f"**Pontos fracos:** {c.get('pontos_fracos', '')}")
-                
+
                 # Exibir dados relevantes
                 if "dados_relevantes" in data:
                     st.markdown("### 📊 Dados Relevantes")
@@ -2186,16 +2181,16 @@ with tab8:
                 # Exibir como texto Markdown se não for JSON
                 st.markdown("### 📄 Resposta do NotebookLM")
                 st.markdown(result)
-            
+
             # Botões de ação
             st.markdown("---")
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 if st.button("📤 Enviar como Tendências", use_container_width=True):
                     st.session_state["tendencias_texto"] = result
                     st.success("✅ Enviado! Vá para aba '📈 Tendências'")
-            
+
             with col2:
                 if st.button("📤 Enviar como Contexto para Ideias", use_container_width=True):
                     st.session_state["nb_contexto_para_ideias"] = result
@@ -2204,7 +2199,7 @@ with tab8:
         # Link direto para o notebook
         if selected_nb_id:
             st.markdown("---")
-            st.markdown(f"### 🔗 Link direto para o notebook")
+            st.markdown("### 🔗 Link direto para o notebook")
             st.markdown(f"[Abrir no NotebookLM](https://notebooklm.google.com/notebook/{selected_nb_id})")
 
 

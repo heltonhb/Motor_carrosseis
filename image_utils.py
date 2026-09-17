@@ -45,7 +45,7 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     for path in FONTES:
         try:
             return ImageFont.truetype(path, size)
-        except (IOError, OSError):
+        except OSError:
             continue
     return ImageFont.load_default()
 
@@ -157,7 +157,7 @@ def fit_slide_text(
 
     kept: list[str] = []
     used = 0
-    for line, h_line in zip(lines, heights):
+    for line, h_line in zip(lines, heights, strict=True):
         if kept and used + h_line > avail_height:
             break
         kept.append(line)
@@ -224,7 +224,7 @@ def add_text_overlay(
         heights, total = _measure_lines(draw, lines, font, 10)
         text_height = total
         text_width = max(
-            (draw.textlength(l, font=font) for l in lines), default=0
+            (draw.textlength(ln, font=font) for ln in lines), default=0
         )
 
     if position == "center":

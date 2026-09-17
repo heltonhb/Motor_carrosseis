@@ -6,12 +6,8 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
-from pathlib import Path
-from typing import Optional
 
 import streamlit as st
-
 
 # Catálogo oficial de cursos da Ensina Mais Tatuapé. Todo conteúdo DEVE orbitar
 # um desses cursos — nunca invente ou generalize para algo fora do portfólio.
@@ -37,7 +33,7 @@ _PERSONA_PREFIX = (
 )
 
 
-def _get_nlm_binary() -> Optional[str]:
+def _get_nlm_binary() -> str | None:
     """
     Encontra o binário do notebooklm no sistema.
     Retorna None se não encontrado.
@@ -73,7 +69,7 @@ def check_auth() -> tuple[bool, str]:
     return False, (stderr.strip() or "não autenticado")
 
 
-def _nlm_cmd(*args, profile: str = "default") -> Optional[list]:
+def _nlm_cmd(*args, profile: str = "default") -> list | None:
     """
     Monta comando notebooklm com profile e caminho absoluto.
     Retorna None se o binário não estiver disponível.
@@ -88,7 +84,7 @@ def _nlm_cmd(*args, profile: str = "default") -> Optional[list]:
     return cmd
 
 
-def _run_cmd(cmd: Optional[list], timeout: int = 120) -> tuple:
+def _run_cmd(cmd: list | None, timeout: int = 120) -> tuple:
     """Executa comando e retorna (stdout, stderr, returncode)."""
     if cmd is None:
         return "", "notebooklm CLI não encontrado no sistema.", 1
@@ -147,16 +143,16 @@ def ask_notebook(
     prompt: str,
     profile: str = "default",
     timeout: int = 300,
-) -> Optional[str]:
+) -> str | None:
     """
     Faz uma pergunta ao notebook e retorna a resposta.
-    
+
     Args:
         notebook_id: ID do notebook
         prompt: Pergunta a ser feita
         profile: Perfil NotebookLM
         timeout: Timeout em segundos
-    
+
     Returns:
         Resposta do notebook ou None em caso de erro
     """
@@ -170,7 +166,7 @@ def ask_notebook(
     ) as f:
         f.write(prompt)
         prompt_file = f.name
-    
+
     try:
         # Executa a pergunta. `--new` inicia uma conversa limpa para cada
         # consulta: o CLI, por padrão, CONTINA a última conversa do servidor,
@@ -183,10 +179,10 @@ def ask_notebook(
             profile=profile,
         )
         stdout, stderr, code = _run_cmd(cmd, timeout=timeout)
-        
+
         if code == 0 and stdout.strip():
             return stdout.strip()
-        
+
         return None
     finally:
         # Remove arquivo temporário
@@ -199,16 +195,16 @@ def ask_notebook_streaming(
     prompt: str,
     profile: str = "default",
     callback=None,
-) -> Optional[str]:
+) -> str | None:
     """
     Faz uma pergunta ao notebook com streaming de resposta.
-    
+
     Args:
         notebook_id: ID do notebook
         prompt: Pergunta a ser feita
         profile: Perfil NotebookLM
         callback: Função chamada com cada chunk de texto
-    
+
     Returns:
         Resposta completa do notebook ou None
     """
@@ -222,7 +218,7 @@ def ask_notebook_streaming(
     ) as f:
         f.write(prompt)
         prompt_file = f.name
-    
+
     try:
         # Executa a pergunta. `--new` zera a conversa do servidor a cada
         # consulta (padrão do CLI é CONTINUAR a última), `-y` pula a
@@ -244,20 +240,20 @@ def ask_notebook_streaming(
             text=True,
             bufsize=1,
         )
-        
+
         full_response = []
         for line in process.stdout:
             full_response.append(line)
             if callback and line.strip():
                 callback(line)
-        
+
         try:
             process.wait(timeout=300)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
             return None
-        
+
         if full_response:
             text = "".join(full_response).strip()
             # Remove ruídos do CLI do topo da resposta se presentes
@@ -265,11 +261,11 @@ def ask_notebook_streaming(
             text = re.sub(r"^Answer:\s*", "", text, flags=re.MULTILINE)
             if text:
                 return text.strip()
-        
+
         stderr_output = process.stderr.read() if process.stderr else ""
         if stderr_output and stderr_output.strip():
             print("NLM stderr:", stderr_output.strip())
-        
+
         return None
     finally:
         if os.path.exists(prompt_file):
@@ -353,7 +349,7 @@ def _carregar_ideias_historico(limit: int = 30) -> list[str]:
     return excl[:limit]
 
 
-def _build_ideas_prompt(trends: str = "", exclusions: Optional[list] = None) -> str:
+def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str:
     """
     Prompt para geração de ideias de carrossel com ênfase em diversidade.
 
@@ -454,7 +450,7 @@ def get_trends(
     notebook_id: str,
     context: str = "educação infantil e reforço escolar",
     profile: str = "default",
-) -> Optional[str]:
+) -> str | None:
     """Busca tendências no notebook."""
     return ask_notebook(notebook_id, _build_trends_prompt(context), profile)
 
@@ -463,7 +459,7 @@ def generate_ideas(
     notebook_id: str,
     trends: str = "",
     profile: str = "default",
-) -> Optional[str]:
+) -> str | None:
     """Gera ideias de carrossel baseadas no conteúdo do notebook."""
     return ask_notebook(notebook_id, _build_ideas_prompt(trends), profile)
 
@@ -471,7 +467,7 @@ def generate_ideas(
 def get_competitor_analysis(
     notebook_id: str,
     profile: str = "default",
-) -> Optional[str]:
+) -> str | None:
     """Analisa concorrentes baseado no conteúdo do notebook."""
     return ask_notebook(notebook_id, _build_competitor_prompt(), profile)
 
@@ -483,7 +479,7 @@ def search_in_notebook_streaming(
     query: str,
     profile: str = "default",
     callback=None,
-) -> Optional[str]:
+) -> str | None:
     """Busca com streaming — callback recebe cada chunk de texto."""
     return ask_notebook_streaming(
         notebook_id, _build_search_prompt(query), profile, callback
@@ -495,7 +491,7 @@ def get_trends_streaming(
     context: str = "educação infantil e reforço escolar",
     profile: str = "default",
     callback=None,
-) -> Optional[str]:
+) -> str | None:
     """Tendências com streaming — callback recebe cada chunk de texto."""
     return ask_notebook_streaming(
         notebook_id, _build_trends_prompt(context), profile, callback
@@ -507,7 +503,7 @@ def generate_ideas_streaming(
     trends: str = "",
     profile: str = "default",
     callback=None,
-) -> Optional[str]:
+) -> str | None:
     """Ideias com streaming — callback recebe cada chunk de texto."""
     return ask_notebook_streaming(
         notebook_id, _build_ideas_prompt(trends), profile, callback
@@ -518,7 +514,7 @@ def get_competitor_analysis_streaming(
     notebook_id: str,
     profile: str = "default",
     callback=None,
-) -> Optional[str]:
+) -> str | None:
     """Concorrência com streaming — callback recebe cada chunk de texto."""
     return ask_notebook_streaming(
         notebook_id, _build_competitor_prompt(), profile, callback

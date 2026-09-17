@@ -12,4 +12,18 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "persistence", "prompts", "templates"]
+py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "persistence", "prompts", "templates", "parser_nlm", "batch_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # line-length: código legado tem linhas longas; será resolvido no E1
+    "B008",  # Streamlit usa call defaults (st.button etc.) por design
+]

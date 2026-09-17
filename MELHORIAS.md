@@ -66,13 +66,35 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
-## 🔜 PRÓXIMO — Bloco 5: E3 + E4
+## ✅ CONCLUÍDO — Bloco 5 (2026-09-17, commit pendente)
 
-- **E3. Testes com pytest.** Começar por `extract_json` (parser_nlm.py) com
-  saídas reais do NLM — parte mais frágil do sistema. Mock de `processar_lote`
-  já existe como base.
-- **E4. ruff no fluxo.** Pegou `import re` inline e `except` genérico em
-  prompts.py:221. Adicionar ao pyproject e rodar antes do commit.
+**E3 + E4 — Testes e lint no fluxo**
+
+- **E3.** 21 testes pytest passando:
+  - `test_parser_nlm.py` (15): JSON limpo, bloco markdown, ruído antes/
+    depois, vírgula extra, truncado (não crasha), sem JSON, aninhado,
+    prefixo "Answer:" do NLM, listas.
+  - `test_batch_engine.py` (6): lote completo, sem cronograma, multi-ideias,
+    callback de progresso, API None não quebra o lote.
+  - pytest + pytest.ini no pyproject (testpaths).
+- **E4.** ruff configurado (E,F,W,I,UP,B; ignora E501 legado e B008 do
+  Streamlit). De 100 erros → 0:
+  - `import re` inline no app.py movido pro topo
+  - `except Exception` em prompts.py:221 → `(ImportError, OSError, json.JSONDecodeError)`
+  - variáveis `l` → `ln`/`leg` (E741), `key` → `_key` nos loops não usados (B007)
+  - `zip(..., strict=True)` no image_utils (B905), whitespace, imports
+- Comando: `uv tool run ruff check .` — rodar antes de todo commit.
+
+---
+
+## 🔜 PRÓXIMO — Bloco 6: M-items de UX
+
+- **M4.** Copiar de verdade: `navigator.clipboard.writeText` no
+  `clipboard_button` (localhost é contexto seguro).
+- **M6.** "Gerar Ideias" 2ª vez devolve cache sem avisar — invalidar no
+  clique ou avisar como Tendências já faz.
+- **M3.** Histórico navegável: `data/historico_geracoes.json` guarda 50
+  gerações e não há lugar para ver/restaurar.
 
 ## 📋 BACKLOG
 

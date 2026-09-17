@@ -8,8 +8,8 @@ Engenharia de prompts v3:
 - Validação de diversidade de hooks preservada
 """
 
+import json
 from datetime import datetime
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PERSONA — System Instruction para todas as chamadas Gemini
@@ -218,7 +218,8 @@ def build_ideas_prompt_with_feedback() -> str:
     try:
         from persistence import load_metricas
         metricas = load_metricas()
-    except Exception:
+    except (ImportError, OSError, json.JSONDecodeError):
+        # métricas são opcionais: sem arquivo/válido → usa prompt base
         metricas = []
 
     if not metricas:
