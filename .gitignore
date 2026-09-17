@@ -17,7 +17,6 @@ wheels/
 data/
 
 # Arquivos gerados
-prompts_automaticacao.txt
 *.zip
 
 # Mídia e exports locais (gerados, fora do código-fonte)

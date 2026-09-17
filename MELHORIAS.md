@@ -130,15 +130,27 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
-## 🔜 PRÓXIMO — Bloco 8: o que sobrou
+## ✅ CONCLUÍDO — Bloco 8 (2026-09-17, commit pendente)
 
-- **E5.** prompts_automaticacao.txt trackeado E no .gitignore — decidir
-  (`git rm --cached` ou remover do ignore).
-- **E1.** Quebrar app.py (2.500 linhas) em tab_*.py + ui/styles.py
-  (janela sem uso do app).
-- **V1–V4.** Evoluções estratégicas: métricas via Instagram Graph API,
-  geração de imagem no app (Imagen), ciclo de vida por ideia, backup
-  export/import.
+**E5 — Conflito .gitignore resolvido**
+
+- `prompts_automaticacao.txt` estava trackeado E no .gitignore (o ignore
+  não tem efeito sobre arquivo já trackeado). O arquivo é conteúdo
+  legítimo (prompts reais de carrossel gerado) — decisão: remover do
+  .gitignore e manter trackeado. Verificado: `git check-ignore` limpo.
+
+---
+
+## 🔜 PRÓXIMO — restante do backlog
+
+- **E1.** Quebrar app.py (~2.500 linhas) em tab_*.py + ui/styles.py
+  (só fazer numa janela em que o app não esteja em uso).
+- **V1.** Métricas automáticas via Instagram Graph API (conta business;
+  alimenta o build_ideas_prompt_with_feedback já existente).
+- **V2.** Geração de imagem DENTRO do app (Imagen via mesma chave Gemini).
+- **V3.** Ciclo de vida por ideia (rascunho→aprovado→agendado→publicado)
+  + registrar qual legenda foi usada → A/B real.
+- **V4.** Backup dos dados (metricas.json + histórico) — export/import.
 
 ## 📋 BACKLOG
 
