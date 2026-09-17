@@ -11,7 +11,7 @@ echo "${GREEN}  Motor de Carrosséis — Setup Rápido  ${NC}"
 echo "${GREEN}===================================${NC}"
 echo
 
-# 1. Verifica/install uv
+# 1. Verifica/instala uv
 if ! command -v uv &> /dev/null; then
     echo -e "${YELLOW}⏳ Instalando uv...${NC}"
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -24,22 +24,19 @@ if [ ! -d ".venv" ]; then
     uv venv .venv
 fi
 
-# 3. Ativa virtualenv
-source .venv/bin/activate
-
-# 4. Instala dependencies (usa lockfile)
+# 3. Instala dependencies (usa venv existente)
 if [ ! -f ".venv/lib/python*/site-packages/streamlit/__init__.py" ]; then
     echo -e "${YELLOW}⏳ Instalando dependências...${NC}"
-    uv pip sync uv.lock
+    uv pip install --python .venv/bin/python -e .
 fi
 
-# 5. Copia .env.example se não existir
+# 4. Copia .env.example se não existir
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}⏳ Configurando .env...${NC}"
     cp .env.example .env
     echo -e "${YELLOW}⚠️ Edite .env e configure a API_KEY_GEMINI${NC}"
 fi
 
-# 6. Inicia o app
+# 5. Inicia o app
 echo -e "${GREEN}✅ Ambiente pronto! Iniciando app...${NC}"
-streamlit run app.py --server.headless true
+.venv/bin/python -m streamlit run app.py --server.headless true

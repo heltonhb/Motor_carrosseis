@@ -10,3 +10,6 @@ dependencies = [
     "pillow>=12.3.0",
     "streamlit>=1.63.0",
 ]
+
+[tool.setuptools]
+py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "persistence", "prompts", "templates"]
