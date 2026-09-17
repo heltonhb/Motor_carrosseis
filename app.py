@@ -1231,8 +1231,12 @@ with tab4:
 
     if st.button("🖼️ Gerar Slide", type="primary", use_container_width=True):
         with st.spinner("Gerando slide…"):
-            sb = create_slide_from_template(tpl_key, int(slide_num), slide_text)
+            sb, info = create_slide_from_template(tpl_key, int(slide_num), slide_text or "", return_info=True)
             st.image(sb, caption=f"Slide {slide_num} — {tpl_data['nome']}")
+            if info.get("truncated"):
+                st.warning(f"⚠️ Texto não coube nem com fonte {info['font_size']}px — {info['dropped']} linha(s) cortada(s). Encurte o texto.")
+            elif info.get("auto_shrunk"):
+                st.info(f"⏳ Fonte auto-reduzida para {info['font_size']}px para caber ({info['lines']} linhas).")
             st.download_button("⬇️ Download", data=sb,
                                file_name=f"slide_{slide_num}_{tpl_key}.png",
                                mime="image/png")
@@ -1247,27 +1251,57 @@ with tab4:
         ideias_sel = st.session_state["ideias_selecionadas"]
         opts_c = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
         escolha_c = st.selectbox("Carrossel:", list(opts_c.keys()), key="carrossel_img")
+        ideia = opts_c[escolha_c]
+        slides_list = ideia.get("slides_sugeridos", [])
+        tkey = eixo_para_template(ideia.get("eixo", "Didático"))
+
+        # ── M1: revisão dos textos ANTES de gerar ─────────────────────────
+        if slides_list:
+            with st.expander(f"✏️ Revisar textos dos slides antes de gerar ({len(slides_list)} slides)", expanded=True):
+                st.caption("Edite os textos abaixo — eles serão usados na imagem. Fonte reduz ou corta trecho apenas se não couber; você será avisado.")
+                for i, slide in enumerate(slides_list):
+                    snum_ed = slide.get("slide", i + 1)
+                    wkey = f"edt_{escolha_c}_{snum_ed}"
+                    st.text_area(
+                        f"Slide {snum_ed} — {slide.get('tipo', '')}",
+                        value=slide.get("texto", ""),
+                        key=wkey,
+                        height=110,
+                    )
 
         if st.button("🎠 Gerar Todos os Slides", type="primary", use_container_width=True):
-            ideia = opts_c[escolha_c]
-            slides_list = ideia.get("slides_sugeridos", [])
-            tkey = eixo_para_template(ideia.get("eixo", "Didático"))
+            # Textos editados (fallback: texto original da ideia)
+            textos_edit = []
+            for i, slide in enumerate(slides_list):
+                snum_ed = slide.get("slide", i + 1)
+                wkey = f"edt_{escolha_c}_{snum_ed}"
+                texto_final = st.session_state.get(wkey, slide.get("texto", ""))
+                textos_edit.append({"slide": snum_ed, "texto": texto_final})
 
-            with st.spinner(f"Gerando {len(slides_list)} slides…"):
+            with st.spinner(f"Gerando {len(textos_edit)} slides…"):
                 progress = st.progress(0)
-                all_slides: list[tuple[int, bytes]] = []
-                for i, slide in enumerate(slides_list):
-                    sb = create_slide_from_template(tkey, slide.get("slide", i + 1), slide.get("texto", ""))
-                    all_slides.append((slide.get("slide", i + 1), sb))
-                    progress.progress((i + 1) / len(slides_list))
+                all_slides: list[tuple[int, bytes, dict]] = []
+                avisos: list[str] = []
+                for i, slide in enumerate(textos_edit):
+                    sb, info = create_slide_from_template(tkey, slide["slide"], slide["texto"], return_info=True)
+                    all_slides.append((slide["slide"], sb, info))
+                    if info.get("truncated"):
+                        avisos.append(f"⚠️ Slide {slide['slide']}: texto não coube nem com fonte {info['font_size']}px — {info['dropped']} linha(s) cortada(s). Encurte o texto e gere de novo.")
+                    elif info.get("auto_shrunk"):
+                        avisos.append(f"⏳ Slide {slide['slide']}: fonte auto-reduzida para {info['font_size']}px para caber ({info['lines']} linhas).")
+                    progress.progress((i + 1) / len(textos_edit))
 
                 st.success(f"✅ {len(all_slides)} slides gerados!")
-                for sn, sb in all_slides:
+                if avisos:
+                    with st.expander(f"⚠️ Avisos de ajuste ({len(avisos)})", expanded=True):
+                        for a in avisos:
+                            st.warning(a)
+                for sn, sb, _ in all_slides:
                     st.image(sb, caption=f"Slide {sn}")
 
                 zip_buf = BytesIO()
                 with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for sn, sb in all_slides:
+                    for sn, sb, _ in all_slides:
                         zf.writestr(f"slide_{sn}.png", sb)
                 st.download_button(
                     "⬇️ Download ZIP",
@@ -1569,7 +1603,6 @@ with tab7:
                         tkey = eixo_para_template(ideia.get("eixo", "Didático"))
                         imgs = generate_all_slides(tkey, ideia.get("slides_sugeridos", []))
                         results[f"slides_{idx}"] = {"titulo": titulo, "images": imgs}
-
                     step += 1
                     progress_bar.progress(step / total_steps)
 
@@ -1615,7 +1648,7 @@ with tab7:
                 st.markdown("#### 🖼️ Slides Gerados")
                 for key, item in slides_items.items():
                     with st.expander(f"🎠 {item['titulo']}", expanded=False):
-                        for sn, sb in item["images"]:
+                        for sn, sb, _info in item["images"]:
                             st.image(sb, caption=f"Slide {sn}")
 
             # Cronograma
@@ -1641,7 +1674,7 @@ with tab7:
                         )
                     for key, item in slides_items.items():
                         folder = item["titulo"][:30].replace(" ", "_")
-                        for sn, sb in item["images"]:
+                        for sn, sb, _info in item["images"]:
                             zf.writestr(f"slides/{folder}/slide_{sn}.png", sb)
                     if "cronograma" in results:
                         zf.writestr(

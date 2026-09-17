@@ -3,19 +3,36 @@ image_utils.py — Geração e composição de imagens para os slides do carross
 
 Correções vs. versão original:
 - word_wrap usa draw.textlength() para medir pixels reais, não caracteres
+- add_text_overlay quebra o texto em múltiplas linhas via _wrap_text_pixels
+  (antes media tudo como uma linha só e sangrava da imagem)
+- create_slide_from_template auto-reduz a fonte principal (60→30px) até o
+  texto caber na área útil; se nem no menor tamanho couber, trunca com
+  reticências e sinaliza no retorno (return_info=True) — nunca some em
+  silêncio
 - Exceções tipadas (sem bare except:)
-- Fontes carregadas uma vez via _load_font() com fallback robusto
-- Cores e caminhos de fonte centralizados em config.py
+- Fontes carregadas via _load_font() com fallback robusto
 """
 
-import textwrap
+import logging
+import os
 from io import BytesIO
-from typing import Optional
+from typing import Literal, overload
 
 from PIL import Image, ImageDraw, ImageFont
 
-from config import CORES, FONTES, FORMATO
+from config import FONTES, FORMATO
 from templates import TEMPLATES, SlideEstrutura
+
+logger = logging.getLogger(__name__)
+
+# ─── Layout do slide 1080×1350 (px) ───────────────────────────────────────────
+_TEXTO_Y_INI = 260                     # início da área do texto principal
+_TEXTO_Y_FIM = 1070                    # fim (deixa folga antes do CTA em h-210)
+_TEXTO_LARGURA = 920                   # 1080 - 2×80 de margem
+_ENTRELINHAS = 14                      # espaçamento extra entre linhas
+
+# Escada de auto-redução da fonte principal (P1)
+_LADDER_FONT_MAIN = (60, 54, 48, 42, 36, 30)
 
 
 # ─── Carregamento de Fonte ────────────────────────────────────────────────────
@@ -71,7 +88,100 @@ def _wrap_text_pixels(
     return lines
 
 
-# ─── Texto sobreposto numa imagem existente ───────────────────────────────────
+def _measure_lines(
+    draw: ImageDraw.ImageDraw,
+    lines: list[str],
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    spacing: int,
+) -> tuple[list[int], int]:
+    """Altura de cada linha e altura total do bloco (com espaçamento)."""
+    heights: list[int] = []
+    for line in lines:
+        try:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            heights.append(int(bbox[3] - bbox[1]))
+        except AttributeError:
+            heights.append(70)
+    total = sum(heights) + spacing * max(0, len(lines) - 1)
+    return heights, total
+
+
+# ─── Ajuste automático do texto principal (P1) ────────────────────────────────
+
+def fit_slide_text(
+    texto: str,
+    max_width: int = _TEXTO_LARGURA,
+    avail_height: int = _TEXTO_Y_FIM - _TEXTO_Y_INI,
+) -> dict:
+    """
+    Escolhe o maior tamanho de fonte da escada em que o texto, com
+    word-wrap, cabe na área útil do slide.
+
+    Returns:
+        dict com font, font_size, lines, block_height, auto_shrunk,
+        truncated e dropped (linhas cortadas).
+    """
+    meas = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+
+    if not texto.strip():
+        return {
+            "font": _load_font(_LADDER_FONT_MAIN[0]),
+            "font_size": _LADDER_FONT_MAIN[0],
+            "lines": [],
+            "block_height": 0,
+            "auto_shrunk": False,
+            "truncated": False,
+            "dropped": 0,
+        }
+
+    for size in _LADDER_FONT_MAIN:
+        font = _load_font(size)
+        lines = _wrap_text_pixels(meas, texto, font, max_width)
+        _, total = _measure_lines(meas, lines, font, _ENTRELINHAS)
+        if total <= avail_height:
+            return {
+                "font": font,
+                "font_size": size,
+                "lines": lines,
+                "block_height": total,
+                "auto_shrunk": size != _LADDER_FONT_MAIN[0],
+                "truncated": False,
+                "dropped": 0,
+            }
+
+    # Nem no menor tamanho coube: trunca o que passa e sinaliza.
+    size = _LADDER_FONT_MAIN[-1]
+    font = _load_font(size)
+    lines = _wrap_text_pixels(meas, texto, font, max_width)
+    heights, _ = _measure_lines(meas, lines, font, _ENTRELINHAS)
+
+    kept: list[str] = []
+    used = 0
+    for line, h_line in zip(lines, heights):
+        if kept and used + h_line > avail_height:
+            break
+        kept.append(line)
+        used += h_line + _ENTRELINHAS
+
+    dropped = len(lines) - len(kept)
+    if dropped and kept:
+        kept[-1] = kept[-1].rstrip() + "…"
+    logger.warning(
+        "Slide truncado: %d de %d linhas couberam (texto de %d caracteres).",
+        len(kept), len(lines), len(texto),
+    )
+    return {
+        "font": font,
+        "font_size": size,
+        "lines": kept,
+        "block_height": used,
+        "auto_shrunk": True,
+        "truncated": bool(dropped),
+        "dropped": dropped,
+    }
+
+
+# ─── Texto sobreposto numa imagem existente (P2) ─────────────────────────────
 
 def add_text_overlay(
     image_bytes: bytes,
@@ -80,11 +190,12 @@ def add_text_overlay(
     position: str = "center",
 ) -> bytes:
     """
-    Adiciona texto sobreposto em PT-BR numa imagem existente.
+    Adiciona texto sobreposto em PT-BR numa imagem existente, com quebra de
+    linha automática (o texto nunca ultrapassa a largura da imagem).
 
     Args:
         image_bytes: Bytes da imagem original (JPG ou PNG).
-        text:        Texto a sobrepor (PT-BR, ≤15 palavras).
+        text:        Texto a sobrepor (PT-BR).
         font_size:   Tamanho da fonte em pontos.
         position:    "center" | "bottom" | "top"
 
@@ -98,26 +209,33 @@ def add_text_overlay(
     draw = ImageDraw.Draw(txt_layer)
     font = _load_font(font_size)
 
-    # Medir dimensões do texto
+    padding = 40
+    max_text_width = width - padding * 2 - 40  # folga extra além do padding
+    lines = _wrap_text_pixels(draw, text, font, max_text_width)
+    joined = "\n".join(lines)
+
+    # Medir o bloco inteiro (todas as linhas)
     try:
-        bbox = draw.textbbox((0, 0), text, font=font)
+        bbox = draw.multiline_textbbox((0, 0), joined, font=font, spacing=10)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
     except AttributeError:
-        text_width, text_height = draw.textsize(text, font=font)  # type: ignore[attr-defined]
+        # Fallback: soma manual das linhas
+        heights, total = _measure_lines(draw, lines, font, 10)
+        text_height = total
+        text_width = max(
+            (draw.textlength(l, font=font) for l in lines), default=0
+        )
 
-    padding = 40
     if position == "center":
-        x = (width - text_width) // 2
         y = (height - text_height) // 2
     elif position == "bottom":
-        x = (width - text_width) // 2
         y = height - text_height - padding * 2
     else:  # top
-        x = (width - text_width) // 2
         y = padding
+    x = (width - text_width) // 2
 
-    # Fundo semi-transparente
+    # Fundo semi-transparente atrás do bloco inteiro
     bg_pad = 20
     bg_box = [
         x - bg_pad,
@@ -127,8 +245,9 @@ def add_text_overlay(
     ]
     draw.rounded_rectangle(bg_box, radius=12, fill=(27, 42, 74, 200))
 
-    # Texto branco
-    draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+    # Texto branco, centralizado por linha
+    draw.multiline_text((x, y), joined, font=font, fill=(255, 255, 255, 255),
+                        spacing=10, align="center")
 
     result = Image.alpha_composite(img, txt_layer)
 
@@ -139,32 +258,49 @@ def add_text_overlay(
 
 # ─── Geração de slide a partir de template ────────────────────────────────────
 
+@overload
 def create_slide_from_template(
     template_key: str,
     slide_num: int,
     texto: str,
-) -> bytes:
+    return_info: Literal[True] = True,
+) -> tuple[bytes, dict]: ...
+@overload
+def create_slide_from_template(
+    template_key: str,
+    slide_num: int,
+    texto: str,
+    return_info: Literal[False],
+) -> bytes: ...
+def create_slide_from_template(
+    template_key: str,
+    slide_num: int,
+    texto: str,
+    return_info: bool = False,
+) -> bytes | tuple[bytes, dict]:
     """
     Gera um slide 1080×1350 px a partir de um template pré-definido.
 
     Fluxo:
     1. Tenta carregar PNG de base em templates_base/<template_key>.png
-    2. Senão, cria fundo gradiente com a cor do eixo
-    3. Aplica word-wrap em pixels reais
+    2. Senão, cria fundo sólido com barra de acento no topo
+    3. Ajusta a fonte principal automaticamente até o texto caber
+       (nunca trunca em silêncio — ver return_info)
     4. Renderiza metadados (número/tipo do slide), texto principal,
        CTA e marca no rodapé
     5. Adiciona "Arraste para o lado ➔" discreto no canto inferior direito
-       (exceto no slide 8/CTA)
+       (exceto no último slide)
 
-    Returns:
-        Bytes PNG do slide gerado.
+    Args:
+        return_info: se True, retorna (bytes, info) onde info contém
+            font_size, auto_shrunk, truncated e dropped para a UI exibir
+            avisos de ajuste.
     """
     w, h = FORMATO["largura"], FORMATO["altura"]
     template = TEMPLATES.get(template_key, TEMPLATES["desconstrucao_didatica"])
 
     # ── 1. Imagem de base ────────────────────────────────────────────────────
     template_path = f"templates_base/{template_key}.png"
-    import os
     if os.path.exists(template_path):
         img = Image.open(template_path).convert("RGBA")
         if img.size != (w, h):
@@ -185,7 +321,6 @@ def create_slide_from_template(
 
     # ── 2. Fontes ────────────────────────────────────────────────────────────
     font_label = _load_font(36)   # metadados (slide N / tipo)
-    font_main  = _load_font(60)   # texto principal
     font_small = _load_font(34)   # CTA, marca, arraste
 
     # ── 3. Metadados do slide ────────────────────────────────────────────────
@@ -200,14 +335,13 @@ def create_slide_from_template(
     draw.text((80, 80),  f"Slide {slide_num}", font=font_label, fill=cor_muted)
     draw.text((80, 125), slide_info.tipo.upper(), font=font_label, fill=cor_destaque)
 
-    # ── 4. Texto principal com word-wrap em pixels ───────────────────────────
-    max_text_width = w - 160  # margem de 80px de cada lado
-    lines = _wrap_text_pixels(draw, texto, font_main, max_text_width)
+    # ── 4. Texto principal com ajuste automático (P1) ────────────────────────
+    fit = fit_slide_text(texto)
+    font_main = fit["font"]
+    lines = fit["lines"]
 
-    y_text = 260
-    line_spacing = 14
-
-    for line in lines[:8]:  # limitar a 8 linhas para não vazar o slide
+    y_text = _TEXTO_Y_INI
+    for line in lines:
         try:
             bbox = draw.textbbox((0, 0), line, font=font_main)
             line_h = bbox[3] - bbox[1]
@@ -215,13 +349,13 @@ def create_slide_from_template(
             line_h = 70
 
         draw.text((80, y_text), line, font=font_main, fill=cor_branco)
-        y_text += line_h + line_spacing
+        y_text += line_h + _ENTRELINHAS
 
     # ── 5. CTA e marca no rodapé ─────────────────────────────────────────────
     if slide_num >= len(estrutura):
-        cta_text   = f"Comente '{template['cta_padrao']}' ou WhatsApp: (11) 94475-0009"
+        cta_text = f"Comente '{template['cta_padrao']}' ou WhatsApp: (11) 94475-0009"
     else:
-        cta_text   = f"Comente '{template['cta_padrao']}' no Direct"
+        cta_text = f"Comente '{template['cta_padrao']}' no Direct"
     marca_text = "@ensinamais.tatuape"
 
     # Fundo sutil atrás do CTA
@@ -258,24 +392,36 @@ def create_slide_from_template(
     # ── 7. Exportar ──────────────────────────────────────────────────────────
     output = BytesIO()
     img.convert("RGB").save(output, format="PNG", quality=95)
+
+    info = {
+        "font_size": fit["font_size"],
+        "auto_shrunk": fit["auto_shrunk"],
+        "truncated": fit["truncated"],
+        "dropped": fit["dropped"],
+        "lines": len(fit["lines"]),
+    }
+    if return_info:
+        return output.getvalue(), info
     return output.getvalue()
 
 
 def generate_all_slides(
     template_key: str,
     slides: list[dict],
-) -> list[tuple[int, bytes]]:
+) -> list[tuple[int, bytes, dict]]:
     """
     Gera todos os slides de um carrossel a partir de uma lista de dicts
     com campos 'slide' (int) e 'texto' (str).
 
     Returns:
-        Lista de tuplas (numero_slide, bytes_png).
+        Lista de tuplas (numero_slide, bytes_png, info_ajuste), onde
+        info_ajuste contém font_size, auto_shrunk, truncated, dropped e
+        lines (ver create_slide_from_template).
     """
     result = []
     for slide in slides:
         num   = slide.get("slide", 1)
         texto = slide.get("texto", "")
-        img_bytes = create_slide_from_template(template_key, num, texto)
-        result.append((num, img_bytes))
+        img_bytes, info = create_slide_from_template(template_key, num, texto, return_info=True)
+        result.append((num, img_bytes, info))
     return result
