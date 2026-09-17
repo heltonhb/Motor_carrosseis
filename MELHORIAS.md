@@ -48,10 +48,31 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
-## 🔜 PRÓXIMO — Bloco 4: E1 + E2
+## ✅ CONCLUÍDO — Bloco 4 (2026-09-17, commit pendente)
 
-- **E1. Refatorar app.py (2.300+ linhas).** Quebrar em `tab_<nome>.py`, `ui/styles.py`, `services/parser_nlm.py`.
-- **E2. Eliminar duplicação Lote (tab 7) e Pipeline (tab 8).** São o mesmo orquestrador duplicado.
+**E2 — Orquestrador único para Lote e Pipeline**
+
+- Criado `batch_engine.py` com as funções compartilhadas:
+  `gerar_prompts_ideia()`, `gerar_legendas_ideia()`, `gerar_cronograma()`,
+  `gerar_slides_ideia()` e `processar_lote()` (com callback de progresso).
+- Tab 7 (Lote): loop inline substituído por `processar_lote()`.
+- Tab 8 (Pipeline): etapas 3/4/5 agora chamam `gerar_prompts_ideia()`,
+  `gerar_legendas_ideia()` e `gerar_cronograma()`.
+- Tabs 3 (Prompts) e 5 (Legendas) também usam as funções do engine.
+- Imports órfãos limpos (PROMPT_LEGENDAS, PROMPT_PROMPTS_IMAGEM,
+  generate_all_slides fora do app.py).
+- Testado com mock (results keys + progresso corretos) e app no ar (HTTP 200).
+- E1 (quebrar app.py em tab_*.py) fica para uma janela sem uso do app.
+
+---
+
+## 🔜 PRÓXIMO — Bloco 5: E3 + E4
+
+- **E3. Testes com pytest.** Começar por `extract_json` (parser_nlm.py) com
+  saídas reais do NLM — parte mais frágil do sistema. Mock de `processar_lote`
+  já existe como base.
+- **E4. ruff no fluxo.** Pegou `import re` inline e `except` genérico em
+  prompts.py:221. Adicionar ao pyproject e rodar antes do commit.
 
 ## 📋 BACKLOG
 

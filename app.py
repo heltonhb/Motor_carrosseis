@@ -28,7 +28,14 @@ from config import (
 )
 from gemini import call_gemini, call_gemini_json, invalidate_cache
 from parser_nlm import extract_json
-from image_utils import add_text_overlay, create_slide_from_template, generate_all_slides
+from batch_engine import (
+    gerar_cronograma,
+    gerar_legendas_ideia,
+    gerar_prompts_ideia,
+    gerar_slides_ideia,
+    processar_lote,
+)
+from image_utils import add_text_overlay, create_slide_from_template
 from persistence import (
     save_geracao,
     save_metrica,
@@ -36,8 +43,6 @@ from persistence import (
 )
 from prompts import (
     PROMPT_IDEIAS,
-    PROMPT_LEGENDAS,
-    PROMPT_PROMPTS_IMAGEM,
     PROMPT_TENDENCIAS,
     PROMPT_VIDEO_CURTO,
     TEMPERATURAS,
@@ -1088,13 +1093,9 @@ with tab3:
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
                 ideia = opcoes_p[escolha]
-                ctx = (
-                    f"Carrossel:\n{json.dumps(ideia, ensure_ascii=False)}\n\n"
-                    f"Slides:\n{json.dumps(ideia.get('slides_sugeridos',[]), ensure_ascii=False)}"
-                )
                 # Guarda com índice para não sobrescrever prompts de outras ideias (P3)
                 with st.spinner("🤖 Gerando prompts de imagem…"):
-                    dados = call_gemini_json(PROMPT_PROMPTS_IMAGEM, ctx, temperature=TEMPERATURAS["prompts_imagem"])
+                    dados = gerar_prompts_ideia(ideia)
                     if dados:
                         titulo = ideia.get("titulo", "Ideia")
                         st.session_state.setdefault("prompts_lote", []).append({"titulo": titulo, "prompts": dados})
@@ -1335,9 +1336,8 @@ with tab5:
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
                 ideia = opts_l[escolha_l]
-                ctx = f"Carrossel:\n{json.dumps(ideia, ensure_ascii=False)}"
                 with st.spinner("🤖 Gerando 3 opções de legenda…"):
-                    dados = call_gemini_json(PROMPT_LEGENDAS, ctx, temperature=TEMPERATURAS["legendas"])
+                    dados = gerar_legendas_ideia(ideia)
                     if dados:
                         st.session_state.setdefault("legendas_lote", []).append(dados)
                         save_geracao("legendas", dados)
@@ -1586,41 +1586,23 @@ with tab7:
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
-                results: dict = {}
                 progress_bar = st.progress(0)
                 status_msg   = st.empty()
-                total_steps  = len(ideias_sel) + (1 if fazer_cronograma else 0)
-                step         = 0
 
-                for idx, ideia in enumerate(ideias_sel):
-                    titulo = ideia.get("titulo", f"Ideia {idx+1}")
-                    status_msg.text(f"⚙️ Processando: {titulo}…")
+                def _update_progress(step: int, total: int, msg: str):
+                    status_msg.text(msg)
+                    progress_bar.progress(step / total)
 
-                    if fazer_prompts:
-                        ctx = (
-                            f"Carrossel:\n{json.dumps(ideia, ensure_ascii=False)}\n\n"
-                            f"Slides:\n{json.dumps(ideia.get('slides_sugeridos',[]), ensure_ascii=False)}"
-                        )
-                        dados = call_gemini_json(PROMPT_PROMPTS_IMAGEM, ctx, temperature=TEMPERATURAS["prompts_imagem"])
-                        if dados:
-                            results[f"prompts_{idx}"] = {"titulo": titulo, "prompts": dados}
-
-                    if fazer_slides:
-                        tkey = eixo_para_template(ideia.get("eixo", "Didático"))
-                        imgs = generate_all_slides(tkey, ideia.get("slides_sugeridos", []))
-                        results[f"slides_{idx}"] = {"titulo": titulo, "images": imgs}
-                    step += 1
-                    progress_bar.progress(step / total_steps)
-
-                if fazer_cronograma:
-                    status_msg.text("📅 Gerando cronograma…")
-                    ctx = f"Ideias:\n{json.dumps(ideias_sel, ensure_ascii=False)}"
-                    cron_data = call_gemini_json(get_prompt_cronograma(), ctx, temperature=TEMPERATURAS["cronograma"])
-                    if cron_data:
-                        results["cronograma"] = cron_data
-                        save_geracao("cronograma", cron_data)
-                    step += 1
-                    progress_bar.progress(step / total_steps)
+                results = processar_lote(
+                    ideias_sel,
+                    fazer_prompts=fazer_prompts,
+                    fazer_slides=fazer_slides,
+                    fazer_cronograma=fazer_cronograma,
+                    on_progress=_update_progress,
+                )
+                # Persistir cronograma (mesmo comportamento de antes)
+                if fazer_cronograma and "cronograma" in results:
+                    save_geracao("cronograma", results["cronograma"])
 
                 status_msg.text("✅ Processamento concluído!")
                 st.session_state["batch_results"] = results
@@ -1887,11 +1869,7 @@ with tab8:
                     ))
                     # Gerar prompts para a primeira ideia selecionada
                     first_idea = ideias_formatadas[0]
-                    ctx = (
-                        f"Carrossel:\n{json.dumps(first_idea, ensure_ascii=False)}\n\n"
-                        f"Slides:\n{json.dumps(first_idea.get('slides_sugeridos', []), ensure_ascii=False)}"
-                    )
-                    prompts_data = call_gemini_json(PROMPT_PROMPTS_IMAGEM, ctx, temperature=TEMPERATURAS["prompts_imagem"])
+                    prompts_data = gerar_prompts_ideia(first_idea)
                     if prompts_data:
                         st.session_state.setdefault("prompts_lote", []).append(prompts_data)
                         save_geracao("prompts", prompts_data)
@@ -1903,8 +1881,7 @@ with tab8:
                 if pipeline_ok and pip_legendas:
                     status.info("📝 **[{0}/{1}]** Gerando legendas Instagram…".format(step + 1, total_steps))
                     first_idea = ideias_formatadas[0]
-                    ctx = f"Carrossel:\n{json.dumps(first_idea, ensure_ascii=False)}"
-                    legendas_data = call_gemini_json(PROMPT_LEGENDAS, ctx, temperature=TEMPERATURAS["legendas"])
+                    legendas_data = gerar_legendas_ideia(first_idea)
                     if legendas_data:
                         st.session_state.setdefault("legendas_lote", []).append(legendas_data)
                         save_geracao("legendas", legendas_data)
@@ -1915,8 +1892,7 @@ with tab8:
                 # ── Etapa 5: Cronograma (opcional) ───────────────────────────
                 if pipeline_ok and pip_cronograma:
                     status.info("📅 **[{0}/{1}]** Montando cronograma de 2 semanas…".format(step + 1, total_steps))
-                    ctx = f"Ideias selecionadas:\n{json.dumps(ideias_formatadas, ensure_ascii=False)}"
-                    cron_data = call_gemini_json(get_prompt_cronograma(), ctx, temperature=TEMPERATURAS["cronograma"])
+                    cron_data = gerar_cronograma(ideias_formatadas)
                     if cron_data:
                         st.session_state["cronograma"] = cron_data
                         save_geracao("cronograma", cron_data)
