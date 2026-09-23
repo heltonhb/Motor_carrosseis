@@ -12,6 +12,7 @@ wheels/
 # Secrets — nunca commitar com chaves reais
 .env
 .streamlit/secrets.toml
+token_de_acesso_meta.txt
 
 # Dados persistidos localmente
 data/

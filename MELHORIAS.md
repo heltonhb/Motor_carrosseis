@@ -179,7 +179,128 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
+## ✅ CONCLUÍDO — Bloco 11 (2026-09-22)
 
+**Sessão de Prompts — correções de comportamento (itens 1-4 da avaliação de 22/09)**
+
+- **Segredo protegido.** `token_de_acesso_meta.txt` adicionado ao
+  `.gitignore` (estava fora do ignore — um `git add .` commitaria o token).
+- **Cache invalidado em toda geração (M6 estendido).** `batch_engine.py`
+  ganhou `forcar=False` em `gerar_prompts_ideia`/`gerar_legendas_ideia`/
+  `gerar_cronograma`/`processar_lote` → `invalidate_cache` com o mesmo
+  prompt+ctx. Botões das abas Prompts/Legendas/Cronograma, Lote e Pipeline
+  usam `forcar=True`: 2º clique gera lote novo em vez de devolver cache
+  silencioso.
+- **Seletor de gerações nas abas Prompts e Legendas.** Selectbox quando há
+  >1 geração (nada fica escondido "só no último") + botão 🗑️ para remover.
+- **Formato unificado de `prompts_lote`.** O Pipeline gravava o payload cru
+  (sem `{titulo, prompts}`) e quebrava a exibição da aba 3; agora grava o
+  mesmo formato da aba 3, com a ideia de origem junto. Entradas legadas do
+  histórico são toleradas na leitura.
+- **`validate_prompts()`** novo em `prompts.py` (+ `test_prompts_validate.py`,
+  17 testes): 8 slides, prompt_en e paleta preenchidos, cláusula "text overlay
+  in Brazilian Portuguese", overlay ≤15 palavras, sem "Arraste para o
+  lado"/"Swipe" dentro do overlay, sem personagens da Turma da Mônica (a
+  marca do logo é permitida), WhatsApp no slide final, e fidelidade do
+  overlay ao texto aprovado do slide (overlap de tokens ≥40%). Exibida na
+  aba Prompts (expander de avisos) e resumida no clique de gerar.
+- **Regra 8 no `PROMPT_PROMPTS_IMAGEM`:** fidelidade ao roteiro — cada
+  `text_overlay` deve ser resumo de ≤15 palavras do campo `texto` do slide
+  correspondente; nunca inventar frases fora do roteiro.
+- **Bug pré-existente corrigido:** `app.py` chamava
+  `fetch_post_metrics(token, account_id)` com `account_id` indefinido
+  (NameError no botão "Buscar Métricas") → `page_id`.
+- `test_prompts_validate.py` adicionado ao `testpaths` do pyproject.
+- Verificação: 47 testes passando, `ruff check .` zerado, app sobe
+  (HTTP 200 + health ok) e o script completo executa sem traceback.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 12 (2026-09-23)
+
+**Avaliação de 22/09 — blocos 4-6 (sessão de prompts)**
+
+- **Bloco 4 — identidade visual em fonte única.** `padroesVisuais.txt` virou a
+  única fonte da spec (paleta/tipografia/formas/iconografia): `prompts.py`
+  carrega o arquivo em `PADRAO_VISUAL` (fallback embutido se faltar) e o injeta
+  no `PROMPT_PROMPTS_IMAGEM` — os blocos de identidade duplicados dentro do
+  prompt e da persona foram removidos (a persona guarda só um resumo de 4
+  linhas, para as tarefas de texto). Pastéis reatribuídos aos 4 cursos
+  oficiais: azul claro → Matemática, coral → Português (era "Inglês", fora do
+  portfólio), laranja → Programação, lima → Robótica; JSON de exemplo
+  renomeado (`pastel_matematica`/`pastel_portugues`). Regra Turma da Mônica
+  virou REGRA DUPLA (logo/fachada permitidos como referência fotográfica;
+  gerar personagens proibido, com "no cartoon characters" obrigatório no
+  prompt_en) na persona, no prompt de imagem (regra 7) e no prompt de vídeo.
+- **Bloco 5 — swatch seguro, contagem local, contexto enxuto.** O swatch da
+  paleta só pinta valores hex validados por `cor_eh_valida()` e escapa
+  nome/valor com `html.escape` (fecha o XSS restante do P8 na aba Prompts);
+  `char_count` das legendas passa a ser calculado localmente (`len()`, com
+  fallback só se o texto não veio); `batch_engine._ctx_ideia()` serializa uma
+  única vez só os campos relevantes — sem score/justificativa, sem duplicar
+  `slides_sugeridos` — para prompts e legendas.
+- **Bloco 6 — consistência entre as 8 lâminas.** Regra 9 (`base_prompt` em
+  inglês com os hexes da marca, sem elementos de um slide) + regra 10 (gerar o
+  slide 1 primeiro e usá-lo como referência/seed nos demais) no
+  `PROMPT_PROMPTS_IMAGEM`; o app exibe o `base_prompt` com botão de copiar;
+  `validate_prompts` cobra `base_prompt` presente com #007799/#58B947/#FFC20E.
+- **Testes:** `test_prompts_validate.py` 17 → 25 testes (base_prompt
+  ausente/sem hexes, paleta fora de hex, `cor_eh_valida`, injeção da fonte
+  única, zero "Inglês" nas 3 fontes, regra dupla, regras 9/10).
+- ⚠️ `padroesVisuais.txt` está **untracked** e virou dependência de runtime —
+  `git add padroesVisuais.txt` antes do próximo commit (sem ele o app cai no
+  fallback embutido).
+- Verificação: 55 testes passando, `ruff check .` zerado, script completo
+  executa sem traceback (exit=0), bloco do swatch testado contra XSS com
+  entradas maliciosas.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 13 (2026-09-23)
+
+**Grupo 1 da avaliação de 23/09 — feedback loop real (itens 1-4 + item 7 parcial)**
+
+- **Achado raiz.** `data/metricas.json` tinha **280 entradas de lixo** (título
+  vazio, alcance 0, importadas 2× em 17/09). Como o
+  `build_ideas_prompt_with_feedback` filtra por `alcance > 0`, o
+  **aprendizado com métricas nunca rodou** — toda geração de ideias caía no
+  prompt base, em silêncio. Causas: importador de CSV sem validação,
+  salvando linha a linha (uma reescrita do arquivo por linha → duplicou no
+  2º clique), e nenhum sinal na UI.
+- **`importar_metricas()` (persistence.py).** Lote com **uma única escrita**,
+  validação por linha (título + alcance > 0), normalização (`envios` →
+  `envios_dm`, inteiros, taxas calculadas quando ausentes) e deduplicação
+  por `titulo+data+alcance+instagram_post_id` contra o histórico e dentro do
+  lote. Retorna resumo `{importadas, invalidas, duplicadas}`.
+- **`save_metrica` endurecido.** Mesmo gate (rejeita sem título/alcance 0) e
+  duplicata exata não entra mais (form manual não regride com cliques
+  repetidos).
+- **`limpar_metricas_vazias()`.** Remove em um clique as entradas que não
+  alimentam o loop — botão 🧹 na aba Métricas mostra quantas existem.
+- **Semáforo do feedback loop (aba Ideias).** 🟢 "ATIVO — N posts com
+  métricas reais" vs 🔴 "INATIVO — registre métricas" — o estado antes
+  invisível agora é explícito.
+- **Selectbox de título no form de métricas.** Títulos de posts conhecidos
+  viram dropdown (`accept_new_options=True`; o feedback casa por string de
+  título — digitar à mão quebrava o casamento por typo). Fallback de
+  digitação livre quando não há títulos ainda.
+- **CSV com cabeçalho validado** (colunas obrigatórias checadas antes de
+  importar) e session_state espelhado do disco após importar (o gráfico
+  agora reflete a importação sem reiniciar o app).
+- **`prompts.py`:** `posts_validos` também exige título não vazio (antes só
+  checava `alcance > 0`).
+- **API do Instagram** migrou para `importar_metricas` (mesmo gate +
+  dedup unificado; antes comparava só `instagram_post_id` contra o
+  session_state, que podia estar vazio).
+- **Testes:** `test_metricas_feedback.py` novo (23 testes: validação,
+  normalização, dedup, lote, limpeza, feedback loop vivo/morto/lixo) —
+  suite total **78 passando**. `test_backup.py` incluído no `testpaths`
+  (estava fora da coleta). Ruff zerado.
+- **Integração verificada** com o CSV modelo oficial: 6 importadas →
+  reimportação 0/6 duplicadas → loop ativo injetando o bloco de performance
+  no prompt de ideias.
+
+---
 
 ## 🔜 PRÓXIMO — restante do backlog
 
@@ -254,9 +375,19 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 1. `cd /home/helton/EM_material/Motor_carrosseis && git pull`
 2. Ler este arquivo (MELHORIAS.md) para o estado do plano.
-3. Próximo bloco: **P3+P4** (ver acima).
-4. Fluxo de trabalho estabelecido: editar → testar (`test_image_fix.py`
-   como modelo) → commit → push → atualizar este arquivo.
+3. Próximo: **item 7 restante + item 8 da avaliação de 22/09/2026** (grupo 1
+   CONCLUÍDO no Bloco 13 acima):
+   - **Item 7 (restante).** Amarrar o ciclo de ponta a ponta: ao marcar uma
+     ideia como "publicado", registrar qual legenda foi usada
+     (`update_idea_status` já aceita `legenda_texto`) e estender o feedback
+     loop para legendas/prompts, não só ideias (A/B real).
+   - **Item 8.** README desatualizado (versões 3.5/3.1, "REST API" vs SDK,
+     6 abas vs 10, `requests` como dependência) + escopo alcance vs.
+     impressões na API do Instagram + limpar bloco duplicado "Bloco 10"
+     deste arquivo + P6 (cache NLM) e E1 (quebrar app.py em tab_*.py).
+4. Fluxo de trabalho estabelecido: editar → testar (`uv run --with pytest
+   pytest -q` + `uv tool run ruff check .`) → commit → push → atualizar
+   este arquivo.
 
 Histórico da avaliação original: sessão de 17/09/2026 (busca por
 "sugestões de melhoria" no histórico de sessões do Hermes).

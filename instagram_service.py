@@ -5,35 +5,36 @@ Busca métricas de posts do Instagram Business Account e transforma no formato
 esperado pelo app (mesmo schema do persistence.metrica).
 
 Pré-requisitos:
-- Token de acesso de longa duração (válido por 90 dias)
-- Instagram Business Account ID
-- Permissões: instagram_basic, pages_show_list, pages_read_engagement
+- Token de acesso de longa duração (válido por 90 dias) com scopes:
+  instagram_basic, pages_show_list, pages_read_engagement
+- Page ID da página do Facebook conectada à conta do Instagram
 
 Exemplo de uso:
     from instagram_service import fetch_post_metrics
-    metrics = fetch_post_metrics(token, account_id, post_ids=["123", "456"])
+    metrics = fetch_post_metrics(token, page_id, post_ids=["123", "456"])
 """
 
 from __future__ import annotations
 
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 from datetime import datetime
 from typing import Any
 
 
 def fetch_post_metrics(
     access_token: str,
-    ig_account_id: str,
+    page_id: str,
     post_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Busca métricas de posts específicos do Instagram Business Account.
+    Usa a Page ID da página do Facebook conectada ao Instagram.
 
     Args:
-        access_token: Token de acesso de longa duração da API.
-        ig_account_id: ID da conta Business do Instagram.
+        access_token: Token de acesso de longa duração com scopes de pages.
+        page_id: ID da página do Facebook conectada à conta Instagram.
         post_ids: Lista de IDs de posts a buscar. Se None, busca todos.
 
     Returns:
@@ -54,19 +55,29 @@ def fetch_post_metrics(
         except urllib.error.HTTPError as e:
             return {"error": f"HTTP {e.code}: {e.read().decode('utf-8')}"}
 
-    def get_user_id(access_token: str) -> str | None:
-        """Obtém o ID do usuário do token."""
-        url = f"{base_url}/me?fields=id&access_token={access_token}"
+    def get_ig_account_id_from_page(page_id: str, access_token: str) -> str | None:
+        """Obtém o ID da conta Instagram vinculada à página."""
+        url = f"{base_url}/{page_id}/instagram_business_account?access_token={access_token}"
         data = make_request(url)
-        return data.get("id")
+        if "error" in data:
+            return None
+        ig_account = data.get("instagram_business_account", {})
+        if isinstance(ig_account, dict):
+            return ig_account.get("id")
+        return None
 
-    def get_ig_media_ids(account_id: str) -> list[str]:
-        """Obtém todos os IDs de mídia da conta."""
-        url = f"{base_url}/{account_id}/media?fields=id&access_token={access_token}"
+    def get_ig_media_ids(ig_account_id: str) -> list[str]:
+        """Obtém todos os IDs de mídia da conta do Instagram."""
+        url = f"{base_url}/{ig_account_id}/media?fields=id&access_token={access_token}"
         data = make_request(url)
         if "error" in data:
             return []
         return [item["id"] for item in data.get("data", [])]
+
+    # Obter IG Account ID a partir da Page ID
+    ig_account_id = get_ig_account_id_from_page(page_id, access_token)
+    if not ig_account_id:
+        return []
 
     if not post_ids:
         post_ids = get_ig_media_ids(ig_account_id)

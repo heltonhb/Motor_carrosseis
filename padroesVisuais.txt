@@ -1,0 +1,24 @@
+1. Paleta de Cores e Hierarquia
+A identidade equilibra credibilidade pedagógica com elementos vibrantes e acolhedores voltados ao público infantil e às famílias:
+
+Azul Principal / Brand (#007799 / #0084B4): Transmite confiança, seriedade acadêmica e segurança para os pais. Utilizado em barras de destaque, títulos principais e fundos contrastantes.
+Verde Ação / Matrícula (#58B947 / #68C03F): Cor prioritária de conversão (CTAs como "Agende uma aula experimental gratuita", botões de contato e confirmação).
+Laranja / Amarelo Vibrante (#F58220 / #FFC20E): Traz energia, calor e entusiasmo infantil, usado em badges (Robótica Educacional), destaques com marca-texto e cards temáticos.
+Tons Pastel de Apoio (Cards Disciplinares — um por curso do portfólio oficial):
+Azul claro (#E0F2FE) para Apoio Escolar — Matemática
+Vermelho coral suave (#FFE4E6) para Apoio Escolar — Português
+Laranja suave (#FFEDD5) para Programação
+Verde lima suave (#ECFCCB) para Robótica
+Fundos e Superfícies: Tons muito suaves de off-white e azul acinzentado (#F7F9FF, #EEF4FF) com cartões em branco puro (#FFFFFF) para manter alta legibilidade e leveza.
+2. Tipografia
+Família Tipográfica Principal: Sans-serif geométrica moderna e amigável (estilo Plus Jakarta Sans / Poppins).
+Títulos e Headings: Pesos médios a ultra-bold (Bold/Black), com uso frequente de sublinhados curvos ou marcações com traço amarelado (#FFC20E) destacando palavras-chave ("pressão", "entende", "cada criança").
+Corpo de Texto: Semiserifado limpo em cinza-escuro/azul-marinho (#1E293B), garantindo ótima legibilidade tanto para formulários quanto para descrições de disciplinas. Máximo de 35-45 palavras por tela.
+3. Formas, Bordas e Elevação
+Arredondamento Amigável (Border Radius): Bordas generosamente arredondadas (12px a 24px em cards; pílula/full-round em botões e badges secundárias), eliminando cantos retos pontiagudos para reforçar o clima acolhedor.
+Divisores Orgânicos: Uso de ondas suaves e transições em curva entre seções (especialmente separando o hero banner e as seções de metodologia).
+Sombras e Profundidade: Sombras sutis e difusas (box-shadow suave), conferindo aspecto moderno e flutuante aos cartões de trilhas e cursos.
+4. Iconografia e Detalhes
+Iconografia Delineada e Clara: Ícones minimalistas com fundos circulares coloridos para representar etapas pedagógicas (Avaliação Inicial, Plano Individualizado, Acompanhamento Contínuo).
+Logo: "Ensina Mais Turma da Mônica" com borda branca discreta no canto superior/inferior — referência fotográfica oficial da marca; os personagens da Turma da Mônica NUNCA são gerados (permitido só o logo e o painel real da fachada).
+Continuidade: "Arraste para o lado ➔" em português, canto inferior direito, fonte menor e discreta — camada separada do text_overlay.

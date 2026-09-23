@@ -8,6 +8,7 @@ dependencies = [
     "google-genai>=2.22.0",
     "pandas>=2.2.0",
     "pillow>=12.3.0",
+    "python-dotenv>=1.0.0",
     "streamlit>=1.63.0",
 ]
 
@@ -15,7 +16,7 @@ dependencies = [
 py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "persistence", "prompts", "templates", "parser_nlm", "batch_engine", "ics_export"]
 
 [tool.pytest.ini_options]
-testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py", "test_ics_export.py"]
+testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py", "test_ics_export.py", "test_prompts_validate.py", "test_metricas_feedback.py", "test_backup.py"]
 
 [tool.ruff]
 line-length = 120

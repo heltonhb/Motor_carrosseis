@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from config import DATA_DIR, HISTORICO_FILE, METRICAS_FILE, IDEIAS_ESTADO_FILE
+from config import DATA_DIR, HISTORICO_FILE, IDEIAS_ESTADO_FILE, METRICAS_FILE
 
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
@@ -68,22 +68,134 @@ def load_metricas() -> list[dict]:
     return []
 
 
-def save_metrica(metrica: dict) -> bool:
+def _para_int(valor: Any, padrao: int = 0) -> int:
+    """Converte valor de CSV/API para int (tolera '12', '12.0', '12,5')."""
+    try:
+        return int(float(str(valor).strip().replace(",", ".")))
+    except (TypeError, ValueError):
+        return padrao
+
+
+def metrica_eh_valida(metrica: dict) -> bool:
     """
-    Adiciona uma nova entrada de métrica ao histórico e salva no disco.
+    Uma métrica só alimenta o feedback loop se tiver título e alcance > 0
+    (entradas vazias deixam o loop morto em silêncio).
+    """
+    return bool(
+        isinstance(metrica, dict)
+        and str(metrica.get("titulo", "") or "").strip()
+        and _para_int(metrica.get("alcance", 0)) > 0
+    )
+
+
+def normalizar_metrica(metrica: dict) -> dict:
+    """
+    Padroniza uma métrica crua (CSV/API/form): números como int,
+    'envios' → 'envios_dm' e taxas calculadas quando ausentes
+    (o feedback loop ranqueia por taxa_salvamentos/taxa_envios).
+    """
+    m = dict(metrica)
+    for campo in ("alcance", "salvamentos", "envios", "envios_dm",
+                  "nao_seguidores", "comentarios", "leads_whatsapp"):
+        if campo in m:
+            m[campo] = _para_int(m[campo])
+    if "envios" in m:
+        envios = m.pop("envios")
+        m.setdefault("envios_dm", envios)
+    alc = m.get("alcance", 0)
+    if alc > 0:
+        m.setdefault("taxa_salvamentos", round(m.get("salvamentos", 0) / alc * 100, 1))
+        m.setdefault("taxa_envios", round((m.get("envios_dm", 0) or 0) / alc * 100, 1))
+        m.setdefault("taxa_nao_seguidores", round((m.get("nao_seguidores", 0) or 0) / alc * 100, 1))
+    else:
+        for campo in ("taxa_salvamentos", "taxa_envios", "taxa_nao_seguidores"):
+            m.setdefault(campo, 0.0)
+    m.setdefault("data", "")
+    m.setdefault("titulo", "")
+    return m
+
+
+def _chave_metrica(metrica: dict) -> tuple:
+    """Identidade de uma métrica para deduplicar (reimportação de CSV/API)."""
+    return (
+        str(metrica.get("titulo", "")).strip().lower(),
+        str(metrica.get("data", "")).strip(),
+        metrica.get("alcance", 0),
+        metrica.get("instagram_post_id"),
+    )
+
+
+def save_metrica(metrica: dict, permitir_duplicada: bool = False) -> bool:
+    """
+    Adiciona uma métrica ao histórico — com validação no gate:
+    só entra linha com título E alcance > 0 (senão o feedback loop
+    aprende com lixo). Duplicatas exatas (título+data+alcance+post_id)
+    são ignoradas, salvo permitir_duplicada=True.
 
     Args:
-        metrica: Dict com os campos da MetricaPost.to_dict()
+        metrica: Dict cru (form/CSV/API) ou MetricaPost.to_dict()
 
     Returns:
         True se salvo com sucesso.
     """
+    m = normalizar_metrica(metrica)
+    if not metrica_eh_valida(m):
+        return False
     historico = load_metricas()
-    # Adiciona timestamp de registro se não existir
-    if "registrado_em" not in metrica:
-        metrica["registrado_em"] = datetime.now().isoformat(timespec="seconds")
-    historico.append(metrica)
+    if not permitir_duplicada and any(_chave_metrica(h) == _chave_metrica(m) for h in historico):
+        return False
+    if "registrado_em" not in m:
+        m["registrado_em"] = datetime.now().isoformat(timespec="seconds")
+    historico.append(m)
     return _write_json(METRICAS_FILE, historico)
+
+
+def importar_metricas(metricas: list[dict]) -> dict:
+    """
+    Importa um lote de métricas em UMA única escrita em disco
+    (antes: uma reescrita do arquivo inteiro por linha do CSV).
+
+    Valida cada linha (título + alcance > 0), normaliza e deduplica
+    contra o histórico existente e dentro do próprio lote.
+
+    Returns:
+        {"importadas": int, "invalidas": int, "duplicadas": int}
+    """
+    historico = load_metricas()
+    chaves = {_chave_metrica(h) for h in historico}
+    importadas = invalidas = duplicadas = 0
+    novas: list[dict] = []
+    for bruta in metricas:
+        m = normalizar_metrica(bruta)
+        if not metrica_eh_valida(m):
+            invalidas += 1
+            continue
+        chave = _chave_metrica(m)
+        if chave in chaves:
+            duplicadas += 1
+            continue
+        if "registrado_em" not in m:
+            m["registrado_em"] = datetime.now().isoformat(timespec="seconds")
+        chaves.add(chave)
+        novas.append(m)
+        importadas += 1
+    if novas:
+        historico.extend(novas)
+        _write_json(METRICAS_FILE, historico)
+    return {"importadas": importadas, "invalidas": invalidas, "duplicadas": duplicadas}
+
+
+def limpar_metricas_vazias() -> int:
+    """
+    Remove do histórico as entradas que não alimentam o feedback loop
+    (sem título ou com alcance 0). Retorna quantas foram removidas.
+    """
+    historico = load_metricas()
+    uteis = [m for m in historico if metrica_eh_valida(m)]
+    removidas = len(historico) - len(uteis)
+    if removidas:
+        _write_json(METRICAS_FILE, uteis)
+    return removidas
 
 
 def delete_metrica(index: int) -> bool:

@@ -145,6 +145,7 @@ EIXOS = {
 DATA_DIR = "data"
 METRICAS_FILE = f"{DATA_DIR}/metricas.json"
 HISTORICO_FILE = f"{DATA_DIR}/historico_geracoes.json"
+IDEIAS_ESTADO_FILE = f"{DATA_DIR}/ideias_estado.json"
 
 # ─── Configurações do NotebookLM ─────────────────────────────────────────────
 NOTEBOOK_ID_PADRAO = "7f415de3-0f02-4eb9-b5f1-3d104a00354a"

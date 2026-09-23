@@ -5,7 +5,9 @@ ideias estratégicas, prompts para Google Flow, geração de imagens e cronogram
 """
 
 # ─── Imports (todos no topo) ──────────────────────────────────────────────────
+import html
 import json
+import os
 import re
 import time
 import zipfile
@@ -37,22 +39,26 @@ from config import (
 from gemini import call_gemini, call_gemini_json, invalidate_cache
 from ics_export import cronograma_para_ics
 from image_utils import add_text_overlay, create_slide_from_template
+from instagram_service import fetch_post_metrics
 from parser_nlm import extract_json
 from persistence import (
+    importar_metricas,
+    limpar_metricas_vazias,
     load_ideias_estado,
     load_metricas,
     save_geracao,
     save_metrica,
     sync_session_from_disk,
-    update_idea_status,
 )
 from prompts import (
     PROMPT_TENDENCIAS,
     PROMPT_VIDEO_CURTO,
     TEMPERATURAS,
+    cor_eh_valida,
     get_prompt_cronograma,
     get_prompt_ideias,
     validate_idea_diversity,
+    validate_prompts,
 )
 from templates import TEMPLATES, MetricaPost, eixo_para_template
 
@@ -71,6 +77,10 @@ if "_synced" not in st.session_state:
 
 # ─── CSS customizado ──────────────────────────────────────────────────────────
 st.markdown(f"""
+
+import os
+from dotenv import load_dotenv
+load_dotenv()
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1065,6 +1075,24 @@ with tab2:
         st.divider()
 
     # ── Geração livre ────────────────────────────────────────────────────────
+    # Semáforo do feedback loop: sem métricas úteis, o Gemini gera sem
+    # aprendizado real e nada avisava
+    _metricas_uteis = [
+        m for m in load_metricas()
+        if m.get("alcance", 0) > 0 and str(m.get("titulo", "")).strip()
+    ]
+    if _metricas_uteis:
+        st.success(
+            f"🟢 **Feedback loop ATIVO** — {len(_metricas_uteis)} post(s) com métricas reais "
+            "alimentando a geração de ideias."
+        )
+    else:
+        st.info(
+            "🔴 **Feedback loop INATIVO** — nenhuma métrica útil registrada. "
+            "Registre métricas na aba 📅 Cronograma & Métricas para que as novas ideias "
+            "aprendam com o que performou melhor."
+        )
+
     c1, c2 = st.columns([3, 1])
     with c1:
         foco = st.selectbox(
@@ -1169,33 +1197,81 @@ with tab3:
                 ideia = opcoes_p[escolha]
                 # Guarda com índice para não sobrescrever prompts de outras ideias (P3)
                 with st.spinner("🤖 Gerando prompts de imagem…"):
-                    dados = gerar_prompts_ideia(ideia)
+                    dados = gerar_prompts_ideia(ideia, forcar=True)
                     if dados:
                         titulo = ideia.get("titulo", "Ideia")
-                        st.session_state.setdefault("prompts_lote", []).append({"titulo": titulo, "prompts": dados})
+                        st.session_state.setdefault("prompts_lote", []).append(
+                            {"titulo": titulo, "prompts": dados, "ideia": ideia}
+                        )
                         save_geracao("prompts", {"titulo": titulo, "prompts": dados})
-                        st.success("✅ Prompts gerados!")
+                        avisos_novos = validate_prompts(dados, ideia)
+                        if avisos_novos:
+                            st.warning(f"⚠️ {len(avisos_novos)} aviso(s) na validação dos prompts gerados.")
+                        else:
+                            st.success("✅ Prompts gerados e validados!")
 
         if st.session_state.get("prompts_lote"):
             prompts_items = st.session_state["prompts_lote"]
-            prompts = prompts_items[-1]["prompts"] if prompts_items else {}
+            # Seletor quando há várias gerações (P3 — nada se sobrescreve)
+            idx_p = len(prompts_items) - 1
+            if len(prompts_items) > 1:
+                labels_p = [f"{n + 1}. {it.get('titulo', 'Ideia')}" for n, it in enumerate(prompts_items)]
+                csel, cdel = st.columns([5, 1])
+                with csel:
+                    idx_p = labels_p.index(st.selectbox("Geração de prompts:", labels_p, key="sel_prompts_lote"))
+                with cdel:
+                    st.write("")  # alinha o botão ao selectbox
+                    if st.button("🗑️", key="del_prompts_lote", help="Remover esta geração"):
+                        prompts_items.pop(idx_p)
+                        if not prompts_items:
+                            st.session_state.pop("prompts_lote", None)
+                        st.rerun()
+            item_p = prompts_items[idx_p]
+            # Entradas legadas do histórico podem ter o payload cru ({slides, paleta...})
+            prompts = item_p.get("prompts") if "prompts" in item_p else item_p
+            if not isinstance(prompts, dict):
+                prompts = {}
 
-            # Paleta de cores
+            # Validação na exibição (cobre gerações restauradas do histórico)
+            avisos_p = validate_prompts(prompts, item_p.get("ideia"))
+            if avisos_p:
+                with st.expander(f"⚠️ Avisos de validação ({len(avisos_p)})", expanded=True):
+                    for a in avisos_p:
+                        st.warning(a)
+
+            # Paleta de cores — cores vêm do LLM: só entram no style se forem hex
+            # válidos (cor_eh_valida) e nome/valor passam por html.escape (anti-XSS)
             paleta = prompts.get("paleta_cores", {})
             if paleta:
                 st.markdown("### 🎨 Paleta")
                 pcols = st.columns(len(paleta))
                 for i, (nome, cor) in enumerate(paleta.items()):
+                    nome_seg = html.escape(str(nome))
+                    cor_txt = html.escape(str(cor))
+                    swatch = ""
+                    if cor_eh_valida(cor):
+                        swatch = (
+                            f'<div style="width:52px;height:52px;background:{str(cor).strip()};'
+                            f" border-radius:8px;margin:0 auto 4px;"
+                            f' border:1px solid {CORES["borda"]};'
+                            f' box-shadow:{CORES["app_sombra"]};"></div>'
+                        )
                     with pcols[i]:
-                        st.markdown(f"""
-                        <div style="text-align:center;">
-                            <div style="width:52px;height:52px;background:{cor};
-                                 border-radius:8px;margin:0 auto 4px;
-                                 border:1px solid {CORES['borda']};
-                                 box-shadow:{CORES['app_sombra']};"></div>
-                            <span style="color:{CORES['texto_sec']};font-size:0.72em;">{nome}<br>{cor}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div style="text-align:center;">{swatch}'
+                            f'<span style="color:{CORES["texto_sec"]};font-size:0.72em;">'
+                            f"{nome_seg}<br>{cor_txt}</span></div>",
+                            unsafe_allow_html=True,
+                        )
+
+            # Base prompt — estilo compartilhado entre as 8 lâminas (regra 9)
+            base_prompt = (prompts.get("base_prompt") or "").strip()
+            if base_prompt:
+                st.markdown("### 🧩 Base Prompt (consistência entre as 8 lâminas)")
+                st.code(base_prompt, language=None)
+                clipboard_button(
+                    base_prompt, "📋 Copiar Base Prompt", key="clip_base_prompt"
+                )
 
             # Prompts por slide
             st.markdown("### 📸 Prompts por Slide")
@@ -1411,15 +1487,30 @@ with tab5:
             else:
                 ideia = opts_l[escolha_l]
                 with st.spinner("🤖 Gerando 3 opções de legenda…"):
-                    dados = gerar_legendas_ideia(ideia)
+                    dados = gerar_legendas_ideia(ideia, forcar=True)
                     if dados:
+                        dados["titulo"] = ideia.get("titulo", "Ideia")
                         st.session_state.setdefault("legendas_lote", []).append(dados)
                         save_geracao("legendas", dados)
                         st.success("✅ 3 legendas geradas!")
 
         if st.session_state.get("legendas_lote"):
             legendas_items = st.session_state["legendas_lote"]
-            legendas_data = legendas_items[-1] if legendas_items else {}
+            # Seletor quando há várias gerações (P3 — nada se sobrescreve)
+            idx_l = len(legendas_items) - 1
+            if len(legendas_items) > 1:
+                labels_l = [f"{n + 1}. {it.get('titulo') or 'Geração'}" for n, it in enumerate(legendas_items)]
+                csel_l, cdel_l = st.columns([5, 1])
+                with csel_l:
+                    idx_l = labels_l.index(st.selectbox("Geração de legendas:", labels_l, key="sel_legendas_lote"))
+                with cdel_l:
+                    st.write("")  # alinha o botão ao selectbox
+                    if st.button("🗑️", key="del_legendas_lote", help="Remover esta geração"):
+                        legendas_items.pop(idx_l)
+                        if not legendas_items:
+                            st.session_state.pop("legendas_lote", None)
+                        st.rerun()
+            legendas_data = legendas_items[idx_l]
             opcao_icons = {1: "🔴", 2: "🟡", 3: "🟢"}
 
             for leg in legendas_data.get("legendas", []):
@@ -1430,7 +1521,13 @@ with tab5:
                 if tecnica:
                     titulo_exp += f" [{tecnica}]"
                 legenda_completa = leg.get("legenda_completa", "")
-                char_count = leg.get("char_count", 0)
+                # Contagem local: o número do modelo (char_count) só entra como
+                # fallback quando o texto completo não veio na resposta.
+                char_count = (
+                    len(legenda_completa)
+                    if legenda_completa
+                    else int(leg.get("char_count") or 0)
+                )
 
                 with st.expander(
                     titulo_exp,
@@ -1510,6 +1607,7 @@ with tab6:
                 ctx = f"Ideias selecionadas:\n{json.dumps(ideias_sel, ensure_ascii=False)}"
                 with st.spinner("🤖 Montando cronograma com datas reais…"):
                     # get_prompt_cronograma() injeta a data atual
+                    invalidate_cache(get_prompt_cronograma(), ctx)
                     dados = call_gemini_json(get_prompt_cronograma(), ctx, temperature=TEMPERATURAS["cronograma"])
                     if dados:
                         st.session_state["cronograma"] = dados
@@ -1581,7 +1679,23 @@ with tab6:
     with st.form("form_metricas"):
         c1, c2 = st.columns(2)
         with c1:
-            post_titulo  = st.text_input("Título do post")
+            # Selectbox com os títulos já gerados (ideias + posts publicados):
+            # o feedback loop casa por string de título — digitar à mão quebra
+            # o aprendizado por erro de digitação
+            _titulos_existentes = sorted({
+                str(m.get("titulo", "")).strip()
+                for m in st.session_state.get("historico_metricas", [])
+                if str(m.get("titulo", "")).strip()
+            })
+            post_titulo = st.selectbox(
+                "Título do post",
+                options=_titulos_existentes or ["(digite abaixo)"],
+                accept_new_options=True,
+                help="Escolha o post ou digite um novo — o título é a chave que "
+                     "conecta a métrica à ideia no feedback loop.",
+            )
+            if post_titulo == "(digite abaixo)":
+                post_titulo = st.text_input("Novo título:")
             alcance      = st.number_input("Alcance Total",        min_value=0, value=0)
             salvamentos  = st.number_input("Salvamentos",          min_value=0, value=0)
             envios_dm    = st.number_input("Envios via DM",        min_value=0, value=0)
@@ -1593,46 +1707,53 @@ with tab6:
 
         submitted = st.form_submit_button("💾 Salvar Métricas", use_container_width=True)
 
-        if submitted and alcance > 0:
-            m = MetricaPost(
-                data=str(data_post),
-                titulo=post_titulo,
-                alcance=alcance,
-                salvamentos=salvamentos,
-                envios_dm=envios_dm,
-                nao_seguidores=nao_seg,
-                comentarios=comentarios,
-                leads_whatsapp=leads_wpp,
-            )
-            m.calcular_taxas()
-            m_dict = m.to_dict()
+        if submitted:
+            if not post_titulo.strip():
+                st.error("⚠️ Título do post é obrigatório — é ele que conecta a métrica à ideia no feedback loop.")
+            elif alcance <= 0:
+                st.error("⚠️ Alcance deve ser maior que zero para a métrica alimentar o aprendizado.")
+            else:
+                m = MetricaPost(
+                    data=str(data_post),
+                    titulo=post_titulo.strip(),
+                    alcance=alcance,
+                    salvamentos=salvamentos,
+                    envios_dm=envios_dm,
+                    nao_seguidores=nao_seg,
+                    comentarios=comentarios,
+                    leads_whatsapp=leads_wpp,
+                )
+                m.calcular_taxas()
+                m_dict = m.to_dict()
 
-            # Salvar em disco e session_state
-            save_metrica(m_dict)
-            hist = st.session_state.get("historico_metricas", [])
-            hist.append(m_dict)
-            st.session_state["historico_metricas"] = hist
+                # Salvar em disco e session_state
+                if not save_metrica(m_dict):
+                    st.warning("ℹ️ Métrica idêntica já registrada — nada salvo.")
+                else:
+                    hist = st.session_state.get("historico_metricas", [])
+                    hist.append(m_dict)
+                    st.session_state["historico_metricas"] = hist
 
-            # Resultado visual
-            st.markdown("#### 📈 Resultado")
-            r1, r2, r3, r4 = st.columns(4)
-            with r1:
-                ok = m.taxa_salvamentos >= KPIS["salvamentos_pct"]
-                st.metric("💾 Salvamentos", f"{m.taxa_salvamentos:.1f}%",
-                          delta="✅ Meta" if ok else "❌ Abaixo")
-            with r2:
-                ok = m.taxa_envios >= KPIS["envios_dm_pct"]
-                st.metric("📤 Envios DM", f"{m.taxa_envios:.1f}%",
-                          delta="✅ Meta" if ok else "❌ Abaixo")
-            with r3:
-                ok = m.taxa_nao_seguidores >= KPIS["nao_seguidores_pct"]
-                st.metric("🆕 Não Seguid.", f"{m.taxa_nao_seguidores:.1f}%",
-                          delta="✅ Meta" if ok else "❌ Abaixo")
-            with r4:
-                ok = leads_wpp >= KPIS["leads_semana_min"]
-                st.metric("📱 Leads", str(leads_wpp),
-                          delta="✅ Meta" if ok else "❌ Abaixo")
-            st.success("✅ Métricas salvas em disco!")
+                    # Resultado visual
+                    st.markdown("#### 📈 Resultado")
+                    r1, r2, r3, r4 = st.columns(4)
+                    with r1:
+                        ok = m.taxa_salvamentos >= KPIS["salvamentos_pct"]
+                        st.metric("💾 Salvamentos", f"{m.taxa_salvamentos:.1f}%",
+                                  delta="✅ Meta" if ok else "❌ Abaixo")
+                    with r2:
+                        ok = m.taxa_envios >= KPIS["envios_dm_pct"]
+                        st.metric("📤 Envios DM", f"{m.taxa_envios:.1f}%",
+                                  delta="✅ Meta" if ok else "❌ Abaixo")
+                    with r3:
+                        ok = m.taxa_nao_seguidores >= KPIS["nao_seguidores_pct"]
+                        st.metric("🆕 Não Seguid.", f"{m.taxa_nao_seguidores:.1f}%",
+                                  delta="✅ Meta" if ok else "❌ Abaixo")
+                    with r4:
+                        ok = leads_wpp >= KPIS["leads_semana_min"]
+                        st.metric("📱 Leads", str(leads_wpp),
+                                  delta="✅ Meta" if ok else "❌ Abaixo")
+                    st.success("✅ Métricas salvas em disco!")
 
     # ── V1: Importar métricas via CSV ──────────────────────────────────────────
     st.divider()
@@ -1650,29 +1771,81 @@ with tab6:
         try:
             content = up.read().decode("utf-8")
             reader = csv.DictReader(StringIO(content))
-            importados = 0
-            for row in reader:
-                from persistence import save_metrica
 
-                m_dict = {
-                    "data": row.get("data", "").strip(),
-                    "titulo": row.get("titulo", "").strip(),
-                    "alcance": int(row.get("alcance", 0) or 0),
-                    "salvamentos": int(row.get("salvamentos", 0) or 0),
-                    "envios": int(row.get("envios", 0) or 0),
-                    "leads_whatsapp": int(row.get("leads_whatsapp", 0) or 0),
-                    "registrado_em": datetime.now().isoformat(timespec="seconds"),
-                }
-                save_metrica(m_dict)
-                importados += 1
+            # Validação do cabeçalho antes de importar qualquer linha
+            obrigatorias = {"data", "titulo", "alcance", "salvamentos", "envios", "leads_whatsapp"}
+            faltando = obrigatorias - {c.strip().lower() for c in (reader.fieldnames or [])}
+            if faltando:
+                st.error(
+                    f"❌ CSV sem as colunas obrigatórias: {', '.join(sorted(faltando))}. "
+                    "Use o modelo data/metricas_sample.csv."
+                )
+            else:
+                linhas = list(reader)
+                resumo = importar_metricas(linhas)
 
-            st.success(f"✅ {importados} métrica(s) importada(s) do CSV!")
+                # Espelha o disco no session_state (o gráfico e o histórico
+                # só liam o que estava em memória desde o startup)
+                st.session_state["historico_metricas"] = load_metricas()
+
+                if resumo["importadas"] or resumo["duplicadas"] or resumo["invalidas"]:
+                    partes = [f"✅ {resumo['importadas']} importada(s)"]
+                    if resumo["duplicadas"]:
+                        partes.append(f"{resumo['duplicadas']} duplicada(s) ignorada(s)")
+                    if resumo["invalidas"]:
+                        partes.append(f"{resumo['invalidas']} inválida(s) (sem título ou alcance 0)")
+                    st.success(" · ".join(partes) + ".")
+                else:
+                    st.info("ℹ️ Nenhuma linha no CSV.")
         except Exception as e:
             st.error(f"❌ Erro ao ler CSV: {e}")
+
+    # ── V1: Importar métricas via Instagram Graph API ──────────────────────────
+    st.divider()
+    st.markdown("### 📱 Importar Métricas do Instagram (API)")
+    st.caption("Preencha as credenciais no .env. A API busca impressões, salvamentos, shares e comentários.")
+
+    # Leitura de variáveis de ambiente
+    token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+    page_id = os.getenv("INSTAGRAM_PAGE_ID", "")
+
+    if not token or not page_id:
+        st.warning("⚠️ Configure `INSTAGRAM_ACCESS_TOKEN` e `INSTAGRAM_PAGE_ID` no arquivo .env.")
+    else:
+        if st.button("⬇️ Buscar Métricas do Instagram", key="btn_fetch_instagram", use_container_width=True):
+            with st.spinner("🤖 Buscando métricas..."):
+                metrics = fetch_post_metrics(token, page_id)
+                if metrics:
+                    resumo = importar_metricas(metrics)
+                    st.session_state["historico_metricas"] = load_metricas()
+                    if resumo["importadas"] > 0:
+                        partes = [f"✅ {resumo['importadas']} métrica(s) importada(s) do Instagram"]
+                        if resumo["duplicadas"]:
+                            partes.append(f"{resumo['duplicadas']} já conhecida(s)")
+                        st.success(" · ".join(partes) + ".")
+                    else:
+                        st.info("ℹ️ Nenhuma nova métrica encontrada.")
+                else:
+                    st.error("❌ Não foi possível buscar métricas. Verifique token e page_id.")
 
     # Histórico de métricas
     if st.session_state.get("historico_metricas"):
         st.markdown("### 📋 Histórico de Métricas")
+
+        # Entradas vazias não alimentam o feedback loop — limpeza explícita
+        _vazias = sum(
+            1 for m in st.session_state["historico_metricas"]
+            if not (str(m.get("titulo", "")).strip() and m.get("alcance", 0) > 0)
+        )
+        if _vazias and st.button(
+            f"🧹 Limpar {_vazias} entrada(s) vazia(s) do histórico",
+            help="Remove registros sem título ou com alcance 0 — não alimentam "
+                 "o feedback loop e poluem o gráfico.",
+        ):
+            removidas = limpar_metricas_vazias()
+            st.session_state["historico_metricas"] = load_metricas()
+            st.success(f"✅ {removidas} entrada(s) removida(s).")
+
         df = pd.DataFrame(st.session_state["historico_metricas"])
         st.dataframe(df, use_container_width=True)
 
@@ -1743,6 +1916,7 @@ with tab7:
                     fazer_prompts=fazer_prompts,
                     fazer_slides=fazer_slides,
                     fazer_cronograma=fazer_cronograma,
+                    forcar=True,
                     on_progress=_update_progress,
                 )
                 # Persistir cronograma (mesmo comportamento de antes)
@@ -2012,10 +2186,17 @@ with tab8:
                     status.info(f"🎨 **[{step + 1}/{total_steps}]** Gerando prompts visuais para {len(ideias_formatadas)} ideias…")
                     # Gerar prompts para a primeira ideia selecionada
                     first_idea = ideias_formatadas[0]
-                    prompts_data = gerar_prompts_ideia(first_idea)
+                    prompts_data = gerar_prompts_ideia(first_idea, forcar=True)
                     if prompts_data:
-                        st.session_state.setdefault("prompts_lote", []).append(prompts_data)
-                        save_geracao("prompts", prompts_data)
+                        # Mesmo formato da aba 3 ({titulo, prompts, ideia}) — exibição compatível
+                        st.session_state.setdefault("prompts_lote", []).append(
+                            {
+                                "titulo": first_idea.get("titulo", "Ideia"),
+                                "prompts": prompts_data,
+                                "ideia": first_idea,
+                            }
+                        )
+                        save_geracao("prompts", {"titulo": first_idea.get("titulo", "Ideia"), "prompts": prompts_data})
 
                     step += 1
                     progress.progress(step / total_steps)
@@ -2024,8 +2205,9 @@ with tab8:
                 if pipeline_ok and pip_legendas:
                     status.info(f"📝 **[{step + 1}/{total_steps}]** Gerando legendas Instagram…")
                     first_idea = ideias_formatadas[0]
-                    legendas_data = gerar_legendas_ideia(first_idea)
+                    legendas_data = gerar_legendas_ideia(first_idea, forcar=True)
                     if legendas_data:
+                        legendas_data["titulo"] = first_idea.get("titulo", "Ideia")
                         st.session_state.setdefault("legendas_lote", []).append(legendas_data)
                         save_geracao("legendas", legendas_data)
 
@@ -2035,7 +2217,7 @@ with tab8:
                 # ── Etapa 5: Cronograma (opcional) ───────────────────────────
                 if pipeline_ok and pip_cronograma:
                     status.info(f"📅 **[{step + 1}/{total_steps}]** Montando cronograma de 2 semanas…")
-                    cron_data = gerar_cronograma(ideias_formatadas)
+                    cron_data = gerar_cronograma(ideias_formatadas, forcar=True)
                     if cron_data:
                         st.session_state["cronograma"] = cron_data
                         save_geracao("cronograma", cron_data)
