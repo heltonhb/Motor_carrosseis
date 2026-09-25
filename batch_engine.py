@@ -20,11 +20,13 @@ from config import FLOW_FOTOS, TAG_NAVEGACAO
 from gemini import call_gemini_json, invalidate_cache
 from image_utils import generate_all_slides
 from prompts import (
+    FRASE_FACHADA,
     PADROES_PROIBIDOS_FOTO,
     PROMPT_LEGENDAS,
     PROMPT_PROMPTS_IMAGEM,
     TEMPERATURAS,
     get_prompt_cronograma,
+    personagens_no_texto,
     validate_prompts,
 )
 from refs_catalog import CENAS_FOTO, anexos_gemini, cena_valida, desc_en
@@ -68,11 +70,14 @@ def _para_int(valor) -> int | None:
 
 
 def _normaliza_refs(slide: dict, tipo: str | None) -> None:
-    """Só chaves do catálogo; ≥1 cena fotográfica nos slides 1, 4, 5 e 7."""
+    """Só chaves do catálogo; ≥1 cena fotográfica nos slides 1, 4, 5 e 7;
+    slide 7 SEMPRE com "fachada" (prova social — regra 11)."""
     refs = [r for r in (slide.get("referencias") or []) if cena_valida(r)]
     snum = _para_int(slide.get("slide_num"))
     if snum in {1, 4, 5, 7} and not any(r in CENAS_FOTO for r in refs):
         refs.append(tipo if tipo in CENAS_FOTO else CENAS_FOTO[0])
+    if snum == 7 and "fachada" not in refs:
+        refs.insert(0, "fachada")
     if not refs:
         refs.append("logo")
     slide["referencias"] = refs
@@ -85,8 +90,80 @@ def _anexar(prompt: str, frase: str) -> str:
     return f"{prompt.rstrip('. ')}. {frase}"
 
 
+# Qualquer redação da cláusula de idioma vale — o Gemini parafraseia o início
+# ("... highlight in Brazilian Portuguese: '...'"). O texto entre aspas é que
+# precisa bater com o text_overlay (regras 5 e 8).
+_RE_CLAUSULA_OVERLAY = re.compile(
+    r"in\s+Brazilian\s+Portuguese\s*:\s*['\"]([^'\"]+)['\"]",
+    re.IGNORECASE,
+)
+
+
+def _anexar_antes_da_tag(prompt_en: str, frase: str) -> str:
+    """Anexa `frase` antes da frase da tag — a tag fecha o prompt (regra 6)."""
+    if frase.lower() in prompt_en.lower():
+        return prompt_en
+    idx = prompt_en.lower().find(_FRASE_TAG.lower())
+    if idx == -1:
+        return _anexar(prompt_en, frase)
+    ponto = prompt_en.rfind(".", 0, idx)
+    if ponto == -1:
+        return f"{frase} {prompt_en.lstrip()}"
+    return (
+        f"{prompt_en[: ponto + 1].rstrip()} {frase} "
+        f"{prompt_en[ponto + 1 :].lstrip()}"
+    )
+
+
+def _remove_clausula(texto: str, m: re.Match) -> str:
+    """Apaga UMA ocorrência da cláusula de overlay com pontuação limpa."""
+    start, end = m.span()
+    m_pre = re.search(r"\s*text\s+overlay\s+$", texto[:start], re.IGNORECASE)
+    if m_pre:
+        start = m_pre.start()
+    esq = texto[:start].rstrip()
+    resto = texto[end:]
+    m_pos = re.match(r"\s*\.\s*", resto)
+    if m_pos:
+        resto = resto[m_pos.end() :]
+    if m_pre is None and esq and esq[-1] not in ".!?":
+        esq += "."
+    return f"{esq} {resto.lstrip()}".rstrip() if resto.strip() else esq
+
+
+def _sem_personagens_nomes(texto: str) -> str:
+    """Remove só os nomes de personagens (campos curtos: overlay, estilo)."""
+    out = texto or ""
+    for nome in personagens_no_texto(out):
+        out = re.sub(rf"\b{re.escape(nome)}\b", " ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r"\s+([.,;:!?])", r"\1", out)
+    return out.strip(" ,;:-")
+
+
+def _sem_personagens_frases(texto: str) -> str:
+    """Remove frases que citam personagens (prosa: prompt_en, base_prompt...).
+
+    Se tudo for sobre personagem, remove só os nomes — nunca apaga o texto.
+    """
+    if not personagens_no_texto(texto or ""):
+        return texto
+    frases = [f for f in re.split(r"(?<=[.!?])\s+", (texto or "").strip()) if f]
+    sobras = [f for f in frases if not personagens_no_texto(f)]
+    if not sobras:
+        return _sem_personagens_nomes(texto)
+    return " ".join(sobras)
+
+
 def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
-    """Garante as regras 5, 6 e 7 em TODO slide, seja qual for a origem do JSON."""
+    """Garante as regras 5, 6, 7 e 12 em TODO slide, seja qual for a origem.
+
+    Regra 5: exatamente UMA cláusula de overlay, com o texto igual ao
+    text_overlay — paráfrase e duplicatas geram duas instruções conflitantes
+    para o modelo. Regra 12: com "fachada" nas referências, a foto de
+    referência é intocável (só recebe legenda/cartão por cima). A tag de
+    navegação é sempre a última frase.
+    """
     snum = _para_int(slide.get("slide_num"))
     if snum is None:
         return
@@ -95,25 +172,74 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
         return
     overlay = (slide.get("text_overlay") or "").strip()
     antes = prompt_en
+    msgs: list[str] = []
 
-    # Regra 5 — cláusula de idioma do overlay
-    if overlay and "text overlay in brazilian portuguese" not in prompt_en.lower():
-        prompt_en = _anexar(
+    # Regra 5 — exatamente UMA cláusula, texto canônico = text_overlay
+    matches = list(_RE_CLAUSULA_OVERLAY.finditer(prompt_en))
+    if matches and not overlay:
+        overlay = matches[0].group(1).strip()
+        slide["text_overlay"] = overlay
+        msgs.append(f"slide {snum}: text_overlay herdado da cláusula do prompt_en")
+    if len(matches) > 1:
+        for m in reversed(matches[1:]):
+            prompt_en = _remove_clausula(prompt_en, m)
+        msgs.append(
+            f"slide {snum}: cláusula de overlay duplicada removida — só pode haver "
+            "uma por lâmina (regra 5)"
+        )
+        matches = list(_RE_CLAUSULA_OVERLAY.finditer(prompt_en))
+
+    idx_tag = prompt_en.lower().find(_FRASE_TAG.lower())
+    if matches and snum != 8 and idx_tag != -1 and matches[0].start() > idx_tag:
+        # cláusula anexada DEPOIS da tag: remove e reanexa antes dela
+        prompt_en = _remove_clausula(prompt_en, matches[0])
+        matches = []
+        msgs.append(f"slide {snum}: cláusula de overlay reposicionada antes da tag")
+
+    if matches and overlay and matches[0].group(1).strip() != overlay:
+        m = matches[0]
+        prompt_en = prompt_en[: m.start(1)] + overlay + prompt_en[m.end(1) :]
+        msgs.append(
+            f"slide {snum}: texto da cláusula de overlay unificado com o "
+            "text_overlay (fidelidade — regra 8)"
+        )
+        matches = list(_RE_CLAUSULA_OVERLAY.finditer(prompt_en))
+    if not matches and overlay:
+        prompt_en = _anexar_antes_da_tag(
             prompt_en, f"text overlay in Brazilian Portuguese: '{overlay}'."
         )
 
-    # Regra 7 — cláusula anti-personagem
+    # Regra 7 — cláusula anti-personagem, sempre antes da frase da tag
     if "no cartoon characters" not in prompt_en.lower():
-        prompt_en = _anexar(
+        prompt_en = _anexar_antes_da_tag(
             prompt_en, "No cartoon characters, generic minimalist line-art icons only."
         )
 
-    # Regra 6 — tag de navegação no prompt_en (presente fora do slide 8, ausente no 8)
+    # Regra 12 — fachada intocável: com "fachada" nas referências, a foto de
+    # referência entra exatamente como está; só legenda/card por cima
+    if "fachada" in (slide.get("referencias") or []):
+        antes_f = prompt_en
+        prompt_en = _anexar_antes_da_tag(prompt_en, FRASE_FACHADA)
+        if prompt_en != antes_f:
+            msgs.append(
+                f"slide {snum}: cláusula de fachada intocável adicionada (regra 12)"
+            )
+
+    # Regra 6 — tag no prompt_en (1-7), a ÚLTIMA frase; ausente no slide 8
     if snum == 8:
         if _FRASE_TAG.lower() in prompt_en.lower():
             prompt_en = re.sub(
                 re.escape(_FRASE_TAG), "", prompt_en, flags=re.IGNORECASE
-            ).strip()
+            )
+        elif TAG_NAVEGACAO.lower() in prompt_en.lower():
+            # frase variante escrita pelo Gemini que ainda cita a tag
+            prompt_en = re.sub(
+                r"[^.]*" + re.escape(TAG_NAVEGACAO) + r"[^.]*\.?",
+                "",
+                prompt_en,
+                flags=re.IGNORECASE,
+            )
+        prompt_en = re.sub(r"\s{2,}", " ", prompt_en).strip()
         slide["tag_navegacao"] = ""
     else:
         prompt_en = _anexar(prompt_en, _FRASE_TAG)
@@ -125,7 +251,10 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
 
     if prompt_en != antes:
         slide["prompt_en"] = prompt_en
-        if corrigidos is not None:
+    if corrigidos is not None:
+        if msgs:
+            corrigidos.extend(msgs)
+        elif prompt_en != antes:
             corrigidos.append(
                 f"slide {snum}: cláusulas obrigatórias completadas (regras 5/6/7)"
             )
@@ -140,6 +269,10 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
     - todos os slides: tag de navegação no prompt_en (fora do 8), cláusula
       "no cartoon characters" e "text overlay in Brazilian Portuguese"
       (regras 5, 6 e 7);
+    - personagens da Turma da Mônica removidos de QUALQUER campo (prompt_en,
+      prompt_pt, text_overlay, estilo, base_prompt, dicas_gerais — regra 7);
+    - slides com "fachada" nas referências recebem a cláusula de foto
+      intocável (regra 12) e o slide 7 sempre referencia "fachada" (11);
     - referencias limpas contra o catálogo (regra 11).
 
     Preserva o text_overlay original. Cada correção vira uma linha em
@@ -152,10 +285,41 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
     if not slides:
         return dados
 
+    # Personagens da Turma da Mônica no estilo compartilhado (marca do logo ok)
+    for campo in ("base_prompt", "dicas_gerais"):
+        valor = dados.get(campo) or ""
+        if not isinstance(valor, str) or not personagens_no_texto(valor):
+            continue
+        limpo = _sem_personagens_frases(valor)
+        if limpo != valor:
+            dados[campo] = limpo
+            if corrigidos is not None:
+                nomes = ", ".join(personagens_no_texto(valor))
+                corrigidos.append(f"{campo}: personagem removido ({nomes})")
+
     for slide in slides:
         snum = _para_int(slide.get("slide_num"))
         if snum is None:
             continue
+
+        # Personagens da Turma da Mônica saem de qualquer campo do slide
+        for campo, limpa in (
+            ("prompt_en", _sem_personagens_frases),
+            ("prompt_pt", _sem_personagens_frases),
+            ("text_overlay", _sem_personagens_nomes),
+            ("estilo", _sem_personagens_nomes),
+        ):
+            valor = slide.get(campo) or ""
+            if not isinstance(valor, str) or not personagens_no_texto(valor):
+                continue
+            novo = limpa(valor)
+            if novo and novo != valor:
+                slide[campo] = novo
+                if corrigidos is not None:
+                    nomes = ", ".join(personagens_no_texto(valor))
+                    corrigidos.append(
+                        f"slide {snum}: personagem removido de {campo} ({nomes})"
+                    )
 
         prompt_en = (slide.get("prompt_en") or "").strip()
         overlay = (slide.get("text_overlay") or "").strip()

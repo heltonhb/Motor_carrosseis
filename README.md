@@ -131,9 +131,11 @@ progresso no topo:
 4. **Prompts Google Flow** — Prompts em inglês para o Google Flow, com paleta
    de cores, referências de fotos (catálogo `refs/catalogo.json`), tag de
    navegação gerada junto com a imagem e texto sobreposto em PT-BR. Botão de
-   copiar via clipboard; export `.txt` com a receita de série (gerar o slide 1
-   primeiro e usá-lo como referência nos demais). Opcional: `FLOW_FOTOS=true`
-   no `.env` anexa as fotos reais da unidade ao Gemini na geração.
+   copiar via clipboard; export `.txt` **somente com os 8 prompts** (um bloco
+   por lâmina separado por linha em branco — o formato que a extensão de
+   automação carrega; a receita de série e as referências ficam na tela).
+   Opcional: `FLOW_FOTOS=true` no `.env` anexa as fotos reais da unidade ao
+   Gemini na geração.
 5. **Gerador de Imagens** — Gera slides 1080×1350 px localmente com Pillow
    (upload de imagem, template único ou carrossel completo + ZIP).
 6. **Legendas** — 3 opções de legenda com gancho, CTA, hashtags e contagem

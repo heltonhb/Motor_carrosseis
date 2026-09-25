@@ -148,3 +148,282 @@ def test_normalizar_prompts_e_idempotente():
     snapshot = [dict(s) for s in res["slides"]]
     normalizar_prompts(res)
     assert res["slides"] == snapshot
+
+
+# ─── Regressão: cláusula de overlay duplicada (slide 5 real) ────────────────
+# O Gemini parafraseou a cláusula ("highlight in Brazilian Portuguese") e o
+# enforce anexou uma segunda, com texto diferente e depois da tag: duas
+# instruções conflitantes para o modelo.
+
+def _slide5_duplicado() -> dict:
+    return {
+        "slides": [
+            {
+                "slide_num": 5,
+                "prompt_en": (
+                    "Authentic school photo of a student focused on programming "
+                    "at a modern desktop station at Ensina Mais Tatuapé. Bold "
+                    "Brand Blue #007799 text overlay with yellow marker #FFC20E "
+                    "highlight in Brazilian Portuguese: 'Mentes estruturadas e "
+                    "inovadoras desde o Ensino Fundamental.' No cartoon "
+                    f"characters. {_FRASE_TAG} text overlay in Brazilian "
+                    "Portuguese: 'Mentes estruturadas e inovadoras desde cedo.'"
+                ),
+                "prompt_pt": "",
+                "text_overlay": "Mentes estruturadas e inovadoras desde cedo.",
+                "referencias": ["aluno_programacao"],
+                "tipo_foto": "aluno_programacao",
+                "usa_foto_real": True,
+            }
+        ]
+    }
+
+
+def test_slide5_clausula_duplicada_unificada():
+    import re
+
+    res = _enforce_foto_real(_slide5_duplicado())
+    s5 = res["slides"][0]
+    pen = s5["prompt_en"]
+    # uma única cláusula, com o texto canônico do text_overlay
+    assert re.findall(r"in Brazilian Portuguese: '[^']+'", pen) == [
+        "in Brazilian Portuguese: 'Mentes estruturadas e inovadoras desde cedo.'"
+    ]
+    assert "Fundamental" not in pen
+    # a cláusula continua antes da tag; a tag fecha o prompt
+    assert pen.index("highlight in Brazilian Portuguese") < pen.index(_FRASE_TAG)
+    assert pen.rstrip().endswith("'.")
+    assert s5["prompt_pt"] == "Mentes estruturadas e inovadoras desde cedo."
+
+
+def test_slide5_clausula_duplicada_e_idempotente():
+    res = _enforce_foto_real(_slide5_duplicado())
+    snap = res["slides"][0]["prompt_en"]
+    corrigidos: list = []
+    _enforce_foto_real(res, corrigidos=corrigidos)
+    assert res["slides"][0]["prompt_en"] == snap
+    assert not any("duplicada" in c for c in corrigidos)
+
+
+def test_clausula_ausente_entra_antes_da_tag():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 3,
+                "prompt_en": f"Modern educational slide 3. No cartoon characters. {_FRASE_TAG}",
+                "text_overlay": "Dica de estudo em casa",
+            }
+        ]
+    }
+    pen = _enforce_foto_real(dados)["slides"][0]["prompt_en"]
+    assert "text overlay in Brazilian Portuguese: 'Dica de estudo em casa'" in pen
+    assert pen.index("text overlay in Brazilian") < pen.index(_FRASE_TAG)
+    # tag é sempre a última frase
+    assert pen.rstrip().endswith("'.")
+    assert pen.index("No cartoon characters") < pen.index(_FRASE_TAG)
+
+
+def test_clausula_depois_da_tag_e_reposicionada():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 3,
+                "prompt_en": (
+                    f"Modern educational slide 3. {_FRASE_TAG} "
+                    "text overlay in Brazilian Portuguese: 'Texto certo aqui'."
+                ),
+                "text_overlay": "Texto certo aqui",
+            }
+        ]
+    }
+    pen = _enforce_foto_real(dados)["slides"][0]["prompt_en"]
+    assert pen.index("text overlay in Brazilian") < pen.index(_FRASE_TAG)
+    assert "Texto certo aqui" in pen
+    assert pen.count("Brazilian Portuguese:") == 1
+
+
+def test_slide8_remove_frase_de_tag_variante():
+    from config import TAG_NAVEGACAO
+
+    dados = {
+        "slides": [
+            {
+                "slide_num": 8,
+                "prompt_en": (
+                    "Final CTA slide. Some corner text says '"
+                    f"{TAG_NAVEGACAO}' in PT-BR. "
+                    "text overlay in Brazilian Portuguese: 'Comente AULA'."
+                ),
+                "text_overlay": "Comente AULA",
+            }
+        ]
+    }
+    pen = _enforce_foto_real(dados)["slides"][0]["prompt_en"]
+    assert TAG_NAVEGACAO not in pen
+    assert "text overlay in Brazilian Portuguese" in pen
+
+
+# ─── Regra 12 — fachada intocável ───────────────────────────────────────────
+
+def _slide7() -> dict:
+    return {
+        "slides": [
+            {
+                "slide_num": 7,
+                "prompt_en": (
+                    "Realistic photo of the school facade on Rua Coelho Lisboa, 783. "
+                    "No cartoon characters. "
+                    f"{_FRASE_TAG}"
+                ),
+                "text_overlay": "De volta à harmonia familiar",
+                "referencias": ["fachada"],
+            }
+        ]
+    }
+
+
+def test_fachada_intocavel_clausula_adicionada():
+    from prompts import FRASE_FACHADA
+
+    res = _enforce_foto_real(_slide7())
+    pen = res["slides"][0]["prompt_en"]
+    assert FRASE_FACHADA in pen
+    assert pen.count(FRASE_FACHADA) == 1
+    # antes da tag; a tag fecha o prompt
+    assert pen.index(FRASE_FACHADA) < pen.index(_FRASE_TAG)
+    assert pen.rstrip().endswith("'.")
+
+
+def test_fachada_intocavel_idempotente():
+    res = _enforce_foto_real(_slide7())
+    snap = res["slides"][0]["prompt_en"]
+    corrigidos: list = []
+    _enforce_foto_real(res, corrigidos=corrigidos)
+    assert res["slides"][0]["prompt_en"] == snap
+    assert not any("fachada" in c for c in corrigidos)
+
+
+def test_clausula_fachada_so_quando_referencia_fachada():
+    from prompts import FRASE_FACHADA
+
+    dados = {
+        "slides": [
+            {
+                "slide_num": 3,
+                "prompt_en": f"Modern slide 3. No cartoon characters. {_FRASE_TAG}",
+                "text_overlay": "Dica de estudo",
+                "referencias": ["logo"],
+            }
+        ]
+    }
+    pen = _enforce_foto_real(dados)["slides"][0]["prompt_en"]
+    assert FRASE_FACHADA not in pen
+
+
+def test_slide7_sempre_referencia_fachada():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 7,
+                "prompt_en": f"Facade photo. No cartoon characters. {_FRASE_TAG}",
+                "text_overlay": "Prova social real",
+                "referencias": ["equipe"],
+            }
+        ]
+    }
+    res = _enforce_foto_real(dados)
+    assert "fachada" in res["slides"][0]["referencias"]
+    from prompts import FRASE_FACHADA
+
+    assert FRASE_FACHADA in res["slides"][0]["prompt_en"]
+
+
+# ─── Personagens da Turma da Mônica — remoção automática ────────────────────
+
+def test_personagem_removido_de_prompt_en_por_frase():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 3,
+                "prompt_en": (
+                    "Step-by-step study cards with clock icons. "
+                    "Featuring Cebolinha cartoon character in the corner. "
+                    "No cartoon characters. "
+                    f"{_FRASE_TAG}"
+                ),
+                "text_overlay": "Dica de estudo em casa",
+            }
+        ]
+    }
+    corrigidos: list = []
+    res = _enforce_foto_real(dados, corrigidos=corrigidos)
+    pen = res["slides"][0]["prompt_en"]
+    assert "cebolinha" not in pen.lower()
+    assert "Step-by-step study cards" in pen
+    assert "No cartoon characters" in pen
+    assert pen.rstrip().endswith("'.")
+
+
+def test_personagem_removido_de_text_overlay_e_estilo():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 2,
+                "prompt_en": f"Blue cover slide. {_FRASE_TAG}",
+                "text_overlay": "Aprenda com a Mônica lógica de verdade",
+                "estilo": "Estilo Mônica para a capa",
+            }
+        ]
+    }
+    res = _enforce_foto_real(dados)
+    s2 = res["slides"][0]
+    assert "mônica" not in s2["text_overlay"].lower()
+    assert "lógica de verdade" in s2["text_overlay"]
+    assert "mônica" not in s2["estilo"].lower()
+    assert "Estilo" in s2["estilo"]
+
+
+def test_personagem_removido_de_base_prompt_e_dicas():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 3,
+                "prompt_en": f"Modern slide 3. No cartoon characters. {_FRASE_TAG}",
+                "text_overlay": "Dica de estudo",
+            }
+        ],
+        "base_prompt": (
+            "Shared style: off-white #F7F9FF background, Brand Blue #007799. "
+            "Mônica character illustrations are forbidden."
+        ),
+        "dicas_gerais": "Usar o logo 'Ensina Mais Turma da Mônica' e nunca citar Cascão.",
+    }
+    corrigidos: list = []
+    res = _enforce_foto_real(dados, corrigidos=corrigidos)
+    # frase com personagem removida; o resto do base_prompt continua intacto
+    assert "Shared style" in res["base_prompt"]
+    assert "mônica" not in res["base_prompt"].lower()
+    # em texto curto (dicas), remove só o nome — a marca do logo fica
+    assert "cascão" not in res["dicas_gerais"].lower()
+    assert "Ensina Mais Turma da Mônica" in res["dicas_gerais"]
+    assert any("base_prompt" in c for c in corrigidos)
+    assert any("dicas_gerais" in c for c in corrigidos)
+
+
+def test_personagem_marca_do_logo_permitida():
+    dados = {
+        "slides": [
+            {
+                "slide_num": 3,
+                "prompt_en": (
+                    "Modern slide 3 with official logo 'Ensina Mais Turma da Mônica'. "
+                    f"No cartoon characters. {_FRASE_TAG}"
+                ),
+                "text_overlay": "Conheça a unidade",
+            }
+        ]
+    }
+    corrigidos: list = []
+    pen = _enforce_foto_real(dados, corrigidos=corrigidos)["slides"][0]["prompt_en"]
+    assert "Turma da Mônica" in pen
+    assert not any("personagem removido" in c for c in corrigidos)

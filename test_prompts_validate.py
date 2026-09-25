@@ -1,7 +1,7 @@
 """Testes do validador de prompts de imagem (validate_prompts)."""
 
 from config import TAG_NAVEGACAO
-from prompts import validate_prompts
+from prompts import FRASE_FACHADA, validate_prompts
 
 _TIPOS_THUMB = {1: "recepcao_unidade", 4: "alunos_robotica", 5: "aluno_programacao"}
 
@@ -22,8 +22,9 @@ def _slide(n: int, overlay: str, prompt_en: str | None = None) -> dict:
             if n in _TIPOS_THUMB
             else f"Modern educational slide {n} with cards and line icons"
         )
+        fachada = f"{FRASE_FACHADA} " if n == 7 else ""
         prompt_en = (
-            f"{corpo}. text overlay in Brazilian Portuguese: '{overlay}'. "
+            f"{corpo}. {fachada}text overlay in Brazilian Portuguese: '{overlay}'. "
             f"No cartoon characters. {_tag_frase(n)}"
         ).strip()
     if n in _TIPOS_THUMB:
@@ -131,6 +132,25 @@ def test_prompt_en_sem_clausula_brazilian_portuguese():
     assert any("brazilian portuguese" in a.lower() for a in avisos)
 
 
+def test_clausula_de_overlay_repetida():
+    p = _payload_valido()
+    p["slides"][0]["prompt_en"] += (
+        " Extra text overlay in Brazilian Portuguese: 'Outra frase aqui.'"
+    )
+    avisos = validate_prompts(p)
+    assert any("repete a instrução de texto sobreposto" in a for a in avisos)
+
+
+def test_clausula_de_overlay_variante_e_aceita():
+    """Paráfrase do Gemini ("highlight in Brazilian Portuguese") vale como regra 5."""
+    p = _payload_valido()
+    p["slides"][0]["prompt_en"] = p["slides"][0]["prompt_en"].replace(
+        "text overlay in Brazilian Portuguese", "highlight in Brazilian Portuguese"
+    )
+    avisos = validate_prompts(p)
+    assert not any("regra 5" in a for a in avisos)
+
+
 def test_overlay_com_mais_de_15_palavras():
     p = _payload_valido()
     p["slides"][1]["text_overlay"] = " ".join(["palavra"] * 16)
@@ -172,6 +192,46 @@ def test_marca_do_logo_permitida():
     p = _payload_valido()
     p["slides"][0]["prompt_en"] += " Official logo 'Ensina Mais Turma da Mônica' in corner."
     assert validate_prompts(p) == []
+
+
+def test_personagem_detectado_em_estilo():
+    p = _payload_valido()
+    p["slides"][0]["estilo"] = "Estilo cartoon de Mônica para capa"
+    avisos = validate_prompts(p)
+    assert any('"estilo"' in a and "mônica" in a for a in avisos)
+
+
+def test_personagem_detectado_em_base_prompt_e_dicas():
+    p = _payload_valido()
+    p["base_prompt"] += " With Chico Bento illustration style."
+    p["dicas_gerais"] += " Evite citar Cebolinha."
+    avisos = validate_prompts(p)
+    assert any(a.startswith("⚠️ base_prompt") and "chico bento" in a for a in avisos)
+    assert any(a.startswith("⚠️ dicas_gerais") and "cebolinha" in a for a in avisos)
+
+
+# ─── Regra 12 — fachada intocável ───────────────────────────────────────────
+
+def test_fachada_intocavel_sem_clausula_avisada():
+    p = _payload_valido()
+    p["slides"][6]["prompt_en"] = p["slides"][6]["prompt_en"].replace(
+        FRASE_FACHADA, ""
+    ).replace("  ", " ").strip()
+    avisos = validate_prompts(p)
+    assert any("fachada intocável" in a for a in avisos)
+
+
+def test_fachada_intocavel_com_clausula_ok():
+    p = _payload_valido()
+    assert FRASE_FACHADA in p["slides"][6]["prompt_en"]
+    assert validate_prompts(p) == []
+
+
+def test_slide7_sem_referencia_fachada_avisado():
+    p = _payload_valido()
+    p["slides"][6]["referencias"] = ["equipe"]
+    avisos = validate_prompts(p)
+    assert any('deve incluir "fachada"' in a for a in avisos)
 
 
 # ─── CTA / WhatsApp ─────────────────────────────────────────────────────────
@@ -348,18 +408,30 @@ def test_prompt_pt_vazio():
     assert any("prompt_pt vazio" in a for a in validate_prompts(p))
 
 
-# ─── Export .txt da série (Google Flow) ─────────────────────────────────────
+# ─── Export .txt da série (extensão de automação) ────────────────────────────
 
-def test_formatar_txt_prompts_inclui_serie_e_referencias():
-    from prompts import DICAS_SERIE_FLOW, formatar_txt_prompts
-    txt = formatar_txt_prompts(_payload_valido())
-    assert "COMO GERAR A SÉRIE" in txt
-    assert DICAS_SERIE_FLOW in txt
-    assert "## SLIDE 1" in txt and "## SLIDE 8" in txt
-    assert "Referências: recepcao_unidade" in txt
+def test_formatar_txt_prompts_so_os_8_prompts():
+    from prompts import formatar_txt_prompts
+
+    payload = _payload_valido()
+    txt = formatar_txt_prompts(payload)
+    # só os prompt_en, um bloco por lâmina, separados por linha em branco
+    blocos = [b.strip() for b in txt.split("\n\n") if b.strip()]
+    assert blocos == [s["prompt_en"] for s in payload["slides"]]
+    for proibido in (
+        "CARROSSEL",
+        "## ",
+        "BASE PROMPT",
+        "COMO GERAR",
+        "Referências:",
+        "Text overlay (PT-BR):",
+        payload["base_prompt"][:40],
+        payload["dicas_gerais"],
+    ):
+        assert proibido not in txt
 
 
 def test_formatar_txt_prompts_payload_invalido():
     from prompts import formatar_txt_prompts
-    assert "## SLIDE" not in formatar_txt_prompts({})
+    assert formatar_txt_prompts({}) == ""
     assert formatar_txt_prompts(None) == ""  # type: ignore[arg-type]

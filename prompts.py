@@ -16,10 +16,8 @@ from pathlib import Path
 from config import TAG_NAVEGACAO
 from refs_catalog import (
     CENAS_FOTO,
-    arquivo_principal,
     cena_valida,
     chaves_cenas,
-    rotulo,
     texto_catalogo_para_prompt,
 )
 
@@ -84,7 +82,7 @@ SYSTEM_INSTRUCTION_PERSONA = """Você é a CAROL — Consultora de Aceleração 
 4. INVESTIDOR(A): Paga caro em colégio tradicional e não vê retorno nas notas
 
 ═══ REGRAS INVIOLÁVEIS ═══
-1. TURMA DA MÔNICA — REGRA DUPLA: (a) PERMITIDO citar o logo oficial "Ensina Mais Turma da Mônica", a fachada e o painel real da unidade — são referências fotográficas da própria marca; (b) PROIBIDO mencionar ou descrever personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu, etc.) — são marca registrada, reservados à franqueadora.
+1. TURMA DA MÔNICA — REGRA DUPLA: (a) PERMITIDO citar o logo oficial "Ensina Mais Turma da Mônica", a fachada e o painel real da unidade — são referências fotográficas da própria marca; (b) PROIBIDO mencionar ou descrever personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu, Chico Bento, Pit Lelé, etc.) — são marca registrada, reservados à franqueadora.
 2. Todo CTA DEVE incluir o WhatsApp: (11) 94475-0009
 3. Nunca invente depoimentos com nomes falsos de pessoas físicas. Use: "Depoimento real de família do Tatuapé" ou "Caso de aluno do Ensino Fundamental"
 4. Todo texto visível em imagem DEVE ser em PORTUGUÊS DO BRASIL
@@ -362,11 +360,24 @@ def validate_idea_diversity(ideias: list[dict]) -> list[str]:
 _PERSONAGENS_MONICA = (
     "mônica", "monica", "cebolinha", "cascão", "cascao",
     "magali", "franjinha", "nimbus", "bidu",
+    "chico bento", "pit lelé", "pit lele", "anabela", "aurélia", "aurelia",
 )
 _MARCA_MONICA = (
     "ensina mais turma da mônica", "ensina mais turma da monica",
     "turma da mônica", "turma da monica",
 )
+
+
+def personagens_no_texto(texto: str) -> tuple[str, ...]:
+    """Nomes de personagens da Turma da Mônica citados em `texto`.
+
+    A marca do logo ("Ensina Mais Turma da Mônica") é permitida e removida
+    antes da busca. Usado pelo validador E pelo pós-processamento.
+    """
+    livre = (texto or "").lower()
+    for marca in _MARCA_MONICA:
+        livre = livre.replace(marca, " ")
+    return tuple(p for p in _PERSONAGENS_MONICA if p in livre)
 _STOPWORDS_PT = {
     "para", "como", "mais", "isso", "esta", "esse", "essa", "entre", "sobre",
     "muito", "pode", "fazer", "feito", "quando", "onde", "porque", "então",
@@ -397,6 +408,15 @@ PADROES_PROIBIDOS_FOTO = (
 # Cláusula obrigatória em TODO prompt_en (regra 7 — personagens).
 CLAUSULA_SEM_PERSONAGENS = "no cartoon characters"
 
+# Cláusula de fachada intocável (regra 12) — obrigatória em TODO prompt_en cuja
+# "referencias" inclui "fachada": a foto de referência entra como está, o Flow
+# só compõe legenda/card por cima.
+FRASE_FACHADA = (
+    "Use the reference facade photo exactly as provided, unaltered — do not "
+    "redraw, restyle, recolor or regenerate the building; only compose the "
+    "caption, cards and text on top of it."
+)
+
 
 def cor_eh_valida(cor) -> bool:
     """True se `cor` é um hex CSS seguro (#RGB/#RRGGBB) para style/HTML."""
@@ -407,14 +427,20 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
     """
     Valida a saída da geração de prompts de imagem contra as regras do prompt:
     - 8 slides com prompt_en, prompt_pt e text_overlay preenchidos
-    - prompt_en declara "text overlay in Brazilian Portuguese" (regra 5)
+    - prompt_en declara "text overlay in Brazilian Portuguese" exatamente UMA
+      vez (regra 5) — repetir a instrução confunde o modelo
     - text_overlay ≤ 15 palavras (regra 4), sem a tag de navegação/"Swipe"
     - tag "Mova para o próximo ➔" no prompt_en dos slides 1-7 e AUSENTE no 8
       (regra 6 — a tag é gerada pelo Flow, não é camada separada aqui)
     - cláusula "no cartoon characters" em todo prompt_en (regra 7)
-    - nenhum personagem da Turma da Mônica (a marca do logo é permitida)
+    - nenhum personagem da Turma da Mônica em NENHUM campo (prompt_en,
+      prompt_pt, text_overlay, estilo, base_prompt, dicas_gerais) — a marca
+      do logo é permitida
     - referências por slide presentes e válidas no catálogo refs/catalogo.json
-      (regra 11); slides 1, 4, 5 e 7 precisam de cena fotográfica real
+      (regra 11); slides 1, 4, 5 e 7 precisam de cena fotográfica real;
+      slide 7 deve incluir "fachada"
+    - slides com "fachada" nas referências com a cláusula de foto intocável
+      (regra 12 — a foto de referência não é modificada, só recebe legenda)
     - slides 1, 4 e 5 com foto real (prompt_en começa com "authentic school
       photo", sem padrões genéricos) — regras 2/11
     - último slide com o WhatsApp (CTA inviolável)
@@ -476,6 +502,14 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                 "⚠️ base_prompt contém a tag de navegação — ela é específica de cada lâmina (regra 9)."
             )
 
+    # Personagens da Turma da Mônica no estilo compartilhado (marca do logo ok)
+    for campo in ("base_prompt", "dicas_gerais"):
+        for nome in personagens_no_texto(dados.get(campo) or ""):
+            avisos.append(
+                f'⚠️ {campo} menciona o personagem "{nome}" — proibido '
+                "(marca registrada; só o logo é permitido)."
+            )
+
     # Mapa slide → texto aprovado na ideia de origem (chave "slide", não "slide_num")
     ideia_slides: dict = {}
     if ideia:
@@ -498,8 +532,17 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
             avisos.append(f"⚠️ Slide {snum}: prompt_pt vazio — descreva o slide em PT-BR.")
         if not overlay:
             avisos.append(f"⚠️ Slide {snum}: text_overlay vazio.")
-        if "brazilian portuguese" not in pen_low:
+        # Regra 5 — cláusula de idioma do overlay: exatamente UMA ocorrência
+        n_clausulas = len(
+            re.findall(r"in\s+Brazilian\s+Portuguese\s*:\s*['\"]", pen, re.IGNORECASE)
+        )
+        if n_clausulas == 0:
             avisos.append(f'⚠️ Slide {snum}: prompt_en sem a cláusula "text overlay in Brazilian Portuguese" (regra 5).')
+        elif n_clausulas > 1:
+            avisos.append(
+                f"⚠️ Slide {snum}: prompt_en repete a instrução de texto sobreposto "
+                f"({n_clausulas} cláusulas) — mantenha apenas uma (regra 5)."
+            )
         n_palavras = len(overlay.split())
         if n_palavras > 15:
             avisos.append(f"⚠️ Slide {snum}: text_overlay com {n_palavras} palavras (máximo 15) — regra 4.")
@@ -585,15 +628,27 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                     f"⚠️ Slide {snum}: precisa referenciar uma foto real da unidade "
                     f"(ex.: {', '.join(CENAS_FOTO[:3])}) — regra 11."
                 )
+            if snum == 7 and "fachada" not in refs:
+                avisos.append('⚠️ Slide 7: "referencias" deve incluir "fachada" (regra 11).')
 
-        # Personagens da Turma da Mônica (remove a marca do logo antes de buscar)
-        livre = f"{pen} {slide.get('prompt_pt', '')} {overlay}".lower()
-        for marca in _MARCA_MONICA:
-            livre = livre.replace(marca, " ")
-        for personagem in _PERSONAGENS_MONICA:
-            if personagem in livre:
-                avisos.append(f'⚠️ Slide {snum}: menção ao personagem "{personagem}" — proibido (marca registrada).')
-                break
+        # ── Regra 12: fachada intocável — foto de referência só recebe legenda ──
+        if isinstance(refs, list) and "fachada" in refs:
+            if FRASE_FACHADA.lower() not in pen_low:
+                avisos.append(
+                    f'⚠️ Slide {snum}: prompt_en sem a cláusula de fachada intocável '
+                    '("Use the reference facade photo exactly as provided") — a foto '
+                    "de referência entra como está (regra 12)."
+                )
+
+        # Personagens da Turma da Mônica (a marca do logo é permitida) —
+        # vale para QUALQUER campo do slide, não só prompt/overlay
+        for campo in ("prompt_en", "prompt_pt", "text_overlay", "estilo"):
+            valor = slide.get(campo) or ""
+            for nome in personagens_no_texto(str(valor)):
+                avisos.append(
+                    f'⚠️ Slide {snum}: menção ao personagem "{nome}" em "{campo}" — '
+                    "proibido (marca registrada)."
+                )
 
         # Fidelidade: overlay deve derivar do texto aprovado do slide correspondente
         texto_orig = ideia_slides.get(slide.get("slide_num"))
@@ -636,7 +691,7 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
 • SLIDE 4 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
 • SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
 • SLIDE 6 (Ponte; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
-• SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas.
+• SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas. A foto de referência da fachada é INTOCÁVEL: entra exatamente como está — proibido redesenhar, reestilizar, recolorir, trocar o prédio ou regenerar a cena; o prompt_en DEVE conter a cláusula da regra 12 e o que se compõe por cima é só o cartão de depoimento e a legenda.
 • SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) ("Agende uma aula experimental gratuita" / WhatsApp (11) 94475-0009), ícones minimalistas de salvar + compartilhar DM.
 
 ─── REGRAS DO PROMPT ───
@@ -652,9 +707,9 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
    ❌ ERRADO (slide 1): "Modern educational slide, soft off-white background #F7F9FF, floating white card with 24px rounded corners..."
 3. ESTÉTICA DOS SLIDES 2, 3, 6, 7 e 8 (NÃO se aplica aos slides 1, 4 e 5 — eles usam foto real, veja regra 2). No prompt_en desses slides: descreva explicitamente a estética (modern friendly geometric sans-serif typography, centered elements respecting a 1:1 square safe zone for Instagram grid preview, floating white cards with 16-24px rounded corners, subtle diffuse shadows, soft off-white background #F7F9FF, Brand Blue #007799 headers, Action Green #58B947 pill buttons for CTAs, vibrant yellow/orange #FFC20E highlights, pastel cards, organic curve transitions, minimalist line icons in colored circles).
 4. text_overlay: máximo 15 palavras, fonte bold, legível em celular.
-5. No prompt_en, inclua: "text overlay in Brazilian Portuguese: [TEXTO]".
+5. No prompt_en, inclua EXATAMENTE UMA vez, copiada sem paráfrase: "text overlay in Brazilian Portuguese: [TEXTO]" — nunca troque o início por "highlight/overlay ... in Brazilian Portuguese" e nunca repita a instrução de texto sobreposto na mesma lâmina (uma única vez, sempre com o mesmo texto de text_overlay).
 6. TAG DE NAVEGAÇÃO — GERADA JUNTO COM A IMAGEM: o prompt_en dos slides 1 a 7 DEVE incluir uma frase em inglês instruindo o texto discreto no canto inferior direito, exatamente neste formato: "In the bottom right corner, a small discreet text in Brazilian Portuguese says '{TAG_NAVEGACAO}'." A tag é PT-BR e nunca é traduzida (proibido "Swipe" e "Arraste para o lado"), NUNCA faz parte do text_overlay e NUNCA aparece no slide 8. No campo "tag_navegacao" use exatamente "{TAG_NAVEGACAO}" nos slides 1 a 7 e uma string vazia no slide 8.
-7. PERSONAGENS — REGRA DUPLA: PERMITIDO (fotográfico) referenciar o logo oficial "Ensina Mais Turma da Mônica" e o painel real da fachada — use como referência fiel, não os recrie. PROIBIDO (gerado): em todo prompt_en declare "no cartoon characters — generic minimalist line-art icons only" e NUNCA gere personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu) — a marca no nome do logo é permitida; os personagens, nunca.
+7. PERSONAGENS — REGRA DUPLA: PERMITIDO (fotográfico) referenciar o logo oficial "Ensina Mais Turma da Mônica" e o painel real da fachada — use como referência fiel, não os recrie. PROIBIDO (gerado): em todo prompt_en declare "no cartoon characters — generic minimalist line-art icons only" e NUNCA gere nem mencione personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu, Chico Bento, Pit Lelé, Anabela, Aurélia ou qualquer outro) — em NENHUM campo, nem em português nem em inglês (prompt_en, prompt_pt, text_overlay, estilo, base_prompt, dicas_gerais): se o tema pedir personagem, descreva alunos genéricos. A marca no nome do logo é permitida; os personagens, nunca.
 8. FIDELIDADE AO ROTEIRO: o contexto traz a lista "Slides" com o campo "texto" de cada lâmina aprovada. Cada text_overlay DEVE ser um resumo de até 15 palavras DO TEXTO DO SLIDE CORRESPONDENTE (mesmo gancho e mensagem) — NUNCA invente frases que não estejam no roteiro.
 9. BASE_PROMPT PARA CONSISTÊNCIA: gere também o campo "base_prompt" (em inglês) com APENAS o estilo compartilhado das 8 lâminas — fundo, tipografia, paleta com os hexes #007799, #58B947 e #FFC20E, bordas, sombras, ícones e transições. SEM texto sobreposto e SEM elementos de um slide específico: tem que valer igual para todas as lâminas.
 10. "dicas_gerais" — ESPECÍFICO DESTE CARROSSEL: registre só o que muda de uma geração para outra: a ordem das 8 lâminas, qual referência de foto usar em cada uma e algum cuidado particular do tema. A receita de coesão (gerar o SLIDE 1 primeiro e usá-lo como imagem de referência/estilo para os slides 2 a 8 no Google Flow) é FIXA e vem do próprio app — não repita aqui.
@@ -662,7 +717,8 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
    (a) slides 1, 4, 5 e 7: OBRIGATORIAMENTE ≥1 cena fotográfica real da unidade (fachada, recepcao_unidade, equipe, alunos_robotica, aluno_programacao, alunos_apoio, laboratorio) — nunca só "logo";
    (b) slide 7: deve incluir "fachada";
    (c) a cena deve traduzir o CONTEÚDO do slide (robótica → "alunos_robotica"; programação → "aluno_programacao"; apoio/reforço → "alunos_apoio"; identidade/prova → "fachada");
-   (d) use EXATAMENTE as chaves do catálogo, em minúsculas — qualquer valor fora da lista é inválido."""
+   (d) use EXATAMENTE as chaves do catálogo, em minúsculas — qualquer valor fora da lista é inválido.
+12. FACHADA INTOCÁVEL: quando "fachada" estiver nas "referencias" de um slide (sempre no 7), o prompt_en DEVE conter exatamente esta cláusula: "{FRASE_FACHADA}" — a foto de referência NUNCA é modificada, só recebe legenda/cartão por cima."""
     + """
 
 Retorne JSON:
@@ -708,43 +764,22 @@ DICAS_SERIE_FLOW = """Como gerar as 8 lâminas no Google Flow:
 
 
 def formatar_txt_prompts(dados: dict) -> str:
-    """Export .txt: base prompt, dicas de série e uma seção por lâmina (pronta para colar no Flow)."""
+    """Export .txt: SOMENTE os 8 prompts, um bloco por lâmina separado por
+    linha em branco — é o formato que a extensão de automação carrega.
+
+    Sem título, base prompt, dicas, cabeçalhos "## SLIDE", referências ou
+    linhas "Text overlay (PT-BR)": apenas o prompt_en de cada lâmina.
+    """
     if not isinstance(dados, dict):
         return ""
-    linhas: list[str] = ["CARROSSEL — PROMPTS PARA O GOOGLE FLOW", ""]
-    base = (dados.get("base_prompt") or "").strip()
-    if base:
-        linhas += ["## BASE PROMPT (envie junto com o prompt de cada lâmina)", base, ""]
-    linhas += ["## COMO GERAR A SÉRIE", DICAS_SERIE_FLOW, ""]
-
-    for slide in dados.get("slides") or []:
-        if not isinstance(slide, dict):
-            continue
-        prompt_en = (slide.get("prompt_en") or "").strip()
-        if not prompt_en:
-            continue
-        refs_txt = "; ".join(_linha_referencia(c) for c in slide.get("referencias") or [])
-        linhas += [
-            f"## SLIDE {slide.get('slide_num', '?')}",
-            f"Referências: {refs_txt or '—'}",
-            prompt_en,
-        ]
-        overlay = (slide.get("text_overlay") or "").strip()
-        if overlay:
-            linhas.append(f"Text overlay (PT-BR): {overlay}")
-        linhas.append("")
-
-    dicas = (dados.get("dicas_gerais") or "").strip()
-    if dicas:
-        linhas += ["## DICAS DESTE CARROSSEL", dicas, ""]
-    return "\n".join(linhas).rstrip() + "\n"
-
-
-def _linha_referencia(chave: str) -> str:
-    """'fachada — Fachada da escola [refs/Fachada.png]' (arquivo quando existe)."""
-    rot = rotulo(chave)
-    arq = arquivo_principal(chave)
-    return f"{chave} — {rot}" + (f" [{arq}]" if arq else "")
+    blocos = [
+        (s.get("prompt_en") or "").strip()
+        for s in dados.get("slides") or []
+        if isinstance(s, dict) and (s.get("prompt_en") or "").strip()
+    ]
+    if not blocos:
+        return ""
+    return "\n\n".join(blocos) + "\n"
 
 
 # ─── Legendas com Copywriting Estruturado ────────────────────────────────────
