@@ -1358,7 +1358,7 @@ with tab2:
 # TAB 3 — PROMPTS GOOGLE FLOW
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown("## 🎨 Prompts para Google Flow (ImageFX)")
+    st.markdown("## 🎨 Prompts para Google Flow")
     st.markdown("Gera prompts em inglês para criar cada slide com IA generativa.")
 
     if not st.session_state.get("ideias_selecionadas"):
@@ -2112,6 +2112,11 @@ with tab7:
                 # Persistir cronograma (mesmo comportamento de antes)
                 if fazer_cronograma and "cronograma" in results:
                     save_geracao("cronograma", results["cronograma"])
+                # Prompts do lote entram no histórico como os das abas individuais
+                if fazer_prompts:
+                    for k_res, item_res in results.items():
+                        if k_res.startswith("prompts_"):
+                            save_geracao("prompts", item_res)
 
                 status_msg.text("✅ Processamento concluído!")
                 st.session_state["batch_results"] = results

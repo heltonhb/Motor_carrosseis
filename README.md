@@ -1,7 +1,7 @@
 # Motor de Carrosséis — Ensina Mais Tatuapé
 
 Gerador inteligente de carrosséis para Instagram com análise de tendências,
-ideias estratégicas, prompts para Google Flow (ImageFX), geração de imagens
+ideias estratégicas, prompts para o Google Flow, geração de imagens
 com texto sobreposto e cronograma de postagens.
 
 ---
@@ -128,9 +128,12 @@ progresso no topo:
 2. **Ideias** — Gera 6 ideias estratégicas nos eixos Didático / Comportamental /
    Diagnóstico, com roteiro slide a slide.
 3. **Seleção** — Marque quais ideias usar nas etapas seguintes.
-4. **Prompts Google Flow** — Prompts em inglês para o Google ImageFX, com paleta
-   de cores, referências de fotos e texto sobreposto em PT-BR. Botão de copiar
-   via clipboard.
+4. **Prompts Google Flow** — Prompts em inglês para o Google Flow, com paleta
+   de cores, referências de fotos (catálogo `refs/catalogo.json`), tag de
+   navegação gerada junto com a imagem e texto sobreposto em PT-BR. Botão de
+   copiar via clipboard; export `.txt` com a receita de série (gerar o slide 1
+   primeiro e usá-lo como referência nos demais). Opcional: `FLOW_FOTOS=true`
+   no `.env` anexa as fotos reais da unidade ao Gemini na geração.
 5. **Gerador de Imagens** — Gera slides 1080×1350 px localmente com Pillow
    (upload de imagem, template único ou carrossel completo + ZIP).
 6. **Legendas** — 3 opções de legenda com gancho, CTA, hashtags e contagem

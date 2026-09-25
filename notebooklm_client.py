@@ -411,7 +411,7 @@ def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str
         "4. Evite iniciar mais de uma ideia com a mesma estrutura frase‑de‑abertura (não repita “Imagine que…”, “Você sabia que…”, “E se…”, etc.).\n"
         "5. Variegue o **tom**: algumas ideias podem ser motivacionais, outras informativas, outras urgentes ou empáticas, mas mantenha sempre linguagem adequada para pais de classes A/B do Tatuapé.\n"
         "6. Cada ideia deve trazer um **tema específico** que não seja sinônimo ou parafrase de outro tema da lista. Se um tema da lista de 'TEMAS JÁ UTILIZADOS' for parecido, escolha outro ângulo.\n"
-        "7. Nos slides sugeridos (8 slides), varie os tipos de slide (Capa, Problema, Desenvolvimento, Dica prática, Exemplo, Benefício, Método, CTA) de forma que nenhuma ideia repita exatamente a mesma sequência de tipos.\n\n"
+        "7. Nos slides sugeridos (8 slides), use os tipos canônicos do carrossel na estrutura fixa: 1 Capa, 2 Segunda Capa, 3-5 Entrega, 6 Ponte, 7 Prova, 8 CTA. A variação de uma ideia para outra está no CONTEÚDO de cada lâmina, nunca na sequência de tipos.\n\n"
         "**Estrutura de saída (JSON rígido):\n"
         "{\n"
         "  \"ideias\": [\n"

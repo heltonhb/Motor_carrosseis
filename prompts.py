@@ -112,7 +112,7 @@ A spec completa mora no padroesVisuais.txt e é injetada no prompt de geração 
 • Azul Brand (#007799 / #0084B4): títulos e barras · Verde Ação (#58B947): CTA/WhatsApp · Laranja/Amarelo (#F58220 / #FFC20E): badges e marca-texto.
 • Pastel por curso: azul claro (Matemática), coral (Português), laranja suave (Programação), verde lima (Robótica). Fundos #F7F9FF / #EEF4FF, cards #FFFFFF, texto #1E293B.
 • Fonte sans-serif geométrica (Plus Jakarta Sans / Poppins), bordas 12-24px, sombras suaves, ícones minimalistas em círculos coloridos.
-• Texto visível em imagem: PT-BR — 35-45 palavras por tela nos slides do roteiro renderizados; em prompts de imagem o text_overlay é curto (≤15 palavras; thumbnails 1, 4 e 5: 3-8 palavras). Prompts de geração de imagem: INGLÊS.
+• Texto visível em imagem: PT-BR — 30-50 palavras por tela nos slides do roteiro renderizados (meta 35-45); em prompts de imagem o text_overlay é curto (≤15 palavras; thumbnails 1, 4 e 5: 3-8 palavras). Prompts de geração de imagem: INGLÊS.
 
 Sempre retorne EXCLUSIVAMENTE JSON válido quando solicitado."""
 
@@ -629,14 +629,14 @@ Estas são as ÚNICAS fotos reais da unidade que podem ser sugeridas como refer�
 {texto_catalogo_para_prompt()}
 Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de imagens nem cenas inventadas.
 
-─── ESTRUTURA POR TIPO DE SLIDE (com a referência típica de cada lâmina) ───
+─── ESTRUTURA POR TIPO DE SLIDE (tipos canônicos iguais aos do roteiro: 1 Capa, 2 Segunda Capa, 3-5 Entrega, 6 Ponte, 7 Prova, 8 CTA — com a referência típica de cada lâmina) ───
 • SLIDE 1 (Capa / Thumbnail de abertura — FOTO REAL OBRIGATÓRIA; referência típica: "fachada" ou "recepcao_unidade"): thumbnail construída SOBRE uma foto real da unidade. A foto real é o elemento dominante do slide — ocupa a maior parte do quadro. Sobre ela, aplique texto curto de 3-8 palavras em tipografia geométrica de impacto (Azul Brand #007799, com marca-texto amarelo #FFC20E), legível no celular, centralizado na Safe Zone 1:1 (1080×1080 px) para preservação na grade do perfil. Selo do logo no rodapé. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]" — NUNCA fundo genérico, card flutuante sozinho ou cena ilustrada/gerada por IA.
 • SLIDE 2 (Segunda Capa; referência típica: a cena de atividade que traduz o tema — ex.: "alunos_robotica" para um carrossel de robótica, "aluno_programacao" para programação, "alunos_apoio" para apoio escolar): Fundo contrastante em Azul Brand (#007799 / #0084B4), tipografia branca e amarelo vibrante, transições orgânicas em curva — funciona como capa alternativa no feed.
 • SLIDE 3 (Entrega; referência típica: a cena da disciplina do tema, ex.: "alunos_apoio", "alunos_robotica", "aluno_programacao"): Cards disciplinares flutuantes (branco puro #FFFFFF com toques pastel da disciplina: azul claro, laranja, coral ou verde lima), diagramas, passos com ícones minimalistas em círculos coloridos.
-• SLIDE 4 (Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
-• SLIDE 5 (Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
+• SLIDE 4 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
+• SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
 • SLIDE 6 (Ponte; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
-• SLIDE 7 (Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas.
+• SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas.
 • SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) ("Agende uma aula experimental gratuita" / WhatsApp (11) 94475-0009), ícones minimalistas de salvar + compartilhar DM.
 
 ─── REGRAS DO PROMPT ───
