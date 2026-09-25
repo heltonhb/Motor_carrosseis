@@ -2594,18 +2594,17 @@ with tab8:
                             result = nlm.ask_notebook(selected_nb_id, prompt)
 
                     # Fallback Gemini quando NLM falha (opcional, só se há chave)
-                    if not result and _api_key_ok() and consulta_tipo in ["📈 Tendências do Setor", "💡 Ideias de Carrossel"]:
-                        tb = {
-                            "📈 Tendências do Setor": PROMPT_TENDENCIAS,
-                            "💡 Ideias de Carrossel": get_prompt_ideias(),
-                        }
-                        pergunta_texto = st.session_state.get("nb_pergunta_livre", "").strip()
-                        if consulta_tipo in tb:
-                            status_ctx.write("⚠️ NotebookLM indisponível. Usando Gemini como fallback…")
+                    if not result:
+                        motivo = (getattr(nlm, "last_error", "") or "sem resposta").strip()
+                        if _api_key_ok() and consulta_tipo in ("📈 Tendências do Setor", "💡 Ideias de Carrossel"):
+                            tb = {
+                                "📈 Tendências do Setor": PROMPT_TENDENCIAS,
+                                "💡 Ideias de Carrossel": get_prompt_ideias(),
+                            }
+                            status_ctx.write(f"⚠️ NotebookLM indisponível ({motivo}). Usando Gemini como fallback…")
                             result = call_gemini(tb[consulta_tipo])
-                        elif pergunta_texto:
-                            status_ctx.write("⚠️ NotebookLM indisponível. Usando Gemini como fallback…")
-                            result = call_gemini(pergunta_texto)
+                        else:
+                            status_ctx.update(label=f"❌ Falha na consulta: {motivo}", state="error")
 
                     if result:
                         status_ctx.update(label="✅ Consulta concluída", state="complete")

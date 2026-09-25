@@ -111,6 +111,44 @@ def _run_cmd(cmd: list | None, timeout: int = 120) -> tuple:
         return "", str(e), 1
 
 
+last_error: str = ""
+
+
+def _set_error(msg: str) -> None:
+    global last_error
+    last_error = msg
+
+
+def _motivo_falha(code: int, stderr: str, timeout: int) -> str:
+    """Traduz (exit code, stderr) em um motivo legível para o usuário."""
+    stderr = (stderr or "").strip()
+    if stderr == "Timeout":
+        return f"timeout após {timeout}s"
+    if "não encontrado no sistema" in stderr:
+        return stderr
+    if code != 0:
+        return f"erro do CLI (exit {code}): {stderr[:200] or 'sem stderr'}"
+    return "resposta vazia do CLI"
+
+
+def _limpar_resposta(text: str) -> str:
+    """Remove os ruídos do CLI (cabeçalho/rodapé de conversa) da resposta."""
+    text = re.sub(
+        r"^(?:Continuing|Resumed) conversation [0-9a-f-]+\.\.\.\s*",
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
+        r"^New conversation: [0-9a-f-]+\s*$",
+        "",
+        text,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    text = re.sub(r"^Answer:\s*", "", text, flags=re.MULTILINE)
+    return text.strip()
+
+
 def list_notebooks(profile: str = "default") -> list:
     """Lista todos os notebooks disponíveis."""
     cache_key = f"_nlm_notebooks_cache_{profile}"
@@ -137,8 +175,12 @@ def list_notebooks(profile: str = "default") -> list:
 def _select_notebook(notebook_id: str, profile: str = "default") -> bool:
     """Seleciona o notebook via `use`. Retorna True em caso de sucesso."""
     cmd = _nlm_cmd("use", notebook_id, profile=profile)
-    _, _, code = _run_cmd(cmd)
-    return code == 0
+    _, stderr, code = _run_cmd(cmd)
+    if code == 0:
+        _set_error("")
+        return True
+    _set_error(_motivo_falha(code, stderr, 120))
+    return False
 
 
 def get_notebook_info(notebook_id: str, profile: str = "default") -> dict:
@@ -199,8 +241,14 @@ def ask_notebook(
         stdout, stderr, code = _run_cmd(cmd, timeout=timeout)
 
         if code == 0 and stdout.strip():
-            return stdout.strip()
+            text = _limpar_resposta(stdout)
+            if text:
+                _set_error("")
+                return text
+            _set_error("resposta vazia do CLI")
+            return None
 
+        _set_error(_motivo_falha(code, stderr, timeout))
         return None
     finally:
         # Remove arquivo temporário
@@ -249,6 +297,7 @@ def ask_notebook_streaming(
         )
 
         if cmd is None:
+            _set_error("notebooklm CLI não encontrado no sistema.")
             return None
 
         process = subprocess.Popen(
@@ -270,20 +319,20 @@ def ask_notebook_streaming(
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
+            _set_error("timeout após 300s")
             return None
 
-        if full_response:
-            text = "".join(full_response).strip()
-            # Remove ruídos do CLI do topo da resposta se presentes
-            text = re.sub(r"^(?:Continuing|Resumed) conversation [a-f0-9-]+\.\.\.\s*", "", text, flags=re.MULTILINE)
-            text = re.sub(r"^Answer:\s*", "", text, flags=re.MULTILINE)
-            if text:
-                return text.strip()
-
         stderr_output = process.stderr.read() if process.stderr else ""
+        if full_response:
+            text = _limpar_resposta("".join(full_response))
+            if text:
+                _set_error("")
+                return text
+
         if stderr_output and stderr_output.strip():
             print("NLM stderr:", stderr_output.strip())
 
+        _set_error(_motivo_falha(process.returncode or 0, stderr_output, 300))
         return None
     finally:
         if os.path.exists(prompt_file):
