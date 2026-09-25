@@ -58,25 +58,92 @@ _FRASE_TAG = (
 )
 
 
-def _normaliza_refs(slide: dict, tipo: str) -> None:
-    """Mantém só chaves válidas do catálogo e garante ≥1 cena fotográfica."""
+def _para_int(valor) -> int | None:
+    """slide_num pode vir como 1, '1' ou 'Slide 1' — qualquer forma serve."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        m = re.search(r"\d+", str(valor or ""))
+        return int(m.group()) if m else None
+
+
+def _normaliza_refs(slide: dict, tipo: str | None) -> None:
+    """Só chaves do catálogo; ≥1 cena fotográfica nos slides 1, 4, 5 e 7."""
     refs = [r for r in (slide.get("referencias") or []) if cena_valida(r)]
-    if not any(r in CENAS_FOTO for r in refs):
+    snum = _para_int(slide.get("slide_num"))
+    if snum in {1, 4, 5, 7} and not any(r in CENAS_FOTO for r in refs):
         refs.append(tipo if tipo in CENAS_FOTO else CENAS_FOTO[0])
+    if not refs:
+        refs.append("logo")
     slide["referencias"] = refs
 
 
+def _anexar(prompt: str, frase: str) -> str:
+    """Anexa uma frase ao final do prompt, com pontuação limpa (idempotente)."""
+    if frase.lower() in prompt.lower():
+        return prompt
+    return f"{prompt.rstrip('. ')}. {frase}"
+
+
+def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
+    """Garante as regras 5, 6 e 7 em TODO slide, seja qual for a origem do JSON."""
+    snum = _para_int(slide.get("slide_num"))
+    if snum is None:
+        return
+    prompt_en = (slide.get("prompt_en") or "").strip()
+    if not prompt_en:
+        return
+    overlay = (slide.get("text_overlay") or "").strip()
+    antes = prompt_en
+
+    # Regra 5 — cláusula de idioma do overlay
+    if overlay and "text overlay in brazilian portuguese" not in prompt_en.lower():
+        prompt_en = _anexar(
+            prompt_en, f"text overlay in Brazilian Portuguese: '{overlay}'."
+        )
+
+    # Regra 7 — cláusula anti-personagem
+    if "no cartoon characters" not in prompt_en.lower():
+        prompt_en = _anexar(
+            prompt_en, "No cartoon characters, generic minimalist line-art icons only."
+        )
+
+    # Regra 6 — tag de navegação no prompt_en (presente fora do slide 8, ausente no 8)
+    if snum == 8:
+        if _FRASE_TAG.lower() in prompt_en.lower():
+            prompt_en = re.sub(
+                re.escape(_FRASE_TAG), "", prompt_en, flags=re.IGNORECASE
+            ).strip()
+        slide["tag_navegacao"] = ""
+    else:
+        prompt_en = _anexar(prompt_en, _FRASE_TAG)
+        slide["tag_navegacao"] = TAG_NAVEGACAO
+
+    # prompt_pt nunca fica vazio quando existe overlay
+    if overlay and not (slide.get("prompt_pt") or "").strip():
+        slide["prompt_pt"] = overlay
+
+    if prompt_en != antes:
+        slide["prompt_en"] = prompt_en
+        if corrigidos is not None:
+            corrigidos.append(
+                f"slide {snum}: cláusulas obrigatórias completadas (regras 5/6/7)"
+            )
+
+
 def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
-    """Pós-processamento: garante que os slides 1, 4 e 5 usem foto real.
+    """Pós-processamento dos prompts de imagem — idempotente.
 
-    O Gemini ignora sistematicamente a instrução textual de usar
-    "Authentic school photo of..." e gera layouts genéricos com
-    "soft off-white background, floating white card...".
+    Regras programáticas que o Gemini ignora com frequência:
+    - slides 1, 4 e 5: prompt_en reescrito com foto real ("Authentic school
+      photo of...") e padrões genéricos removidos (regra 2);
+    - todos os slides: tag de navegação no prompt_en (fora do 8), cláusula
+      "no cartoon characters" e "text overlay in Brazilian Portuguese"
+      (regras 5, 6 e 7);
+    - referencias limpas contra o catálogo (regra 11).
 
-    Esta função reescreve programaticamente o prompt_en desses slides
-    para garantir conformidade, preservando o text_overlay original e a
-    cláusula da tag de navegação (regra 6). A cada correção registra uma
-    linha em `corrigidos` (out-collector opcional).
+    Preserva o text_overlay original. Cada correção vira uma linha em
+    `corrigidos` (out-collector opcional).
     """
     if not isinstance(dados, dict):
         return dados
@@ -86,77 +153,76 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
         return dados
 
     for slide in slides:
-        try:
-            snum = int(slide.get("slide_num", 0))
-        except (ValueError, TypeError):
-            continue
-
-        if snum not in {1, 4, 5}:
+        snum = _para_int(slide.get("slide_num"))
+        if snum is None:
             continue
 
         prompt_en = (slide.get("prompt_en") or "").strip()
         overlay = (slide.get("text_overlay") or "").strip()
 
-        # Se já começa corretamente, só garante os campos JSON
-        if prompt_en.lower().startswith("authentic school photo"):
-            limpo = _PADROES_PROIBIDOS_RE.sub("", prompt_en).strip()
-            if snum != 8 and _FRASE_TAG.lower() not in limpo.lower():
-                limpo = f"{limpo.rstrip('.')} {_FRASE_TAG}"
-            if limpo != prompt_en:
-                slide["prompt_en"] = limpo
+        if snum in {1, 4, 5} and prompt_en:
+            if prompt_en.lower().startswith("authentic school photo"):
+                # Conforme: só limpa padrões genéricos residuais e ancora os campos
+                limpo = _PADROES_PROIBIDOS_RE.sub("", prompt_en).strip()
+                if limpo != prompt_en:
+                    slide["prompt_en"] = limpo
+                    if corrigidos is not None:
+                        corrigidos.append(f"slide {snum}: padrões genéricos removidos")
+                slide["usa_foto_real"] = True
+                if slide.get("tipo_foto") not in _CENAS_FOTO:
+                    slide["tipo_foto"] = _TIPOS_RODIZIO[snum]
+                _normaliza_refs(slide, slide["tipo_foto"])
+            else:
+                # ── Slide NÃO-conforme: reescrever o prompt_en ──────────────
+                logger.info(
+                    "Slide %d: prompt_en não iniciava com 'Authentic school photo'. "
+                    "Reescrevendo automaticamente.",
+                    snum,
+                )
+                tipo = slide.get("tipo_foto")
+                if tipo not in _CENAS_FOTO:
+                    tipo = _TIPOS_RODIZIO[snum]
+                cena = _CENAS_FOTO[tipo]
+
+                # Só o que está entre aspas — a frase da tag não pode entrar
+                overlay_match = re.search(
+                    r"text overlay in Brazilian Portuguese:\s*['\"]([^'\"]+)['\"]",
+                    prompt_en,
+                    re.IGNORECASE,
+                )
+                overlay_texto = (
+                    overlay_match.group(1).strip() if overlay_match else overlay
+                )
+
+                slide["prompt_en"] = (
+                    f"Authentic school photo of {cena}, "
+                    f"1080x1350 px vertical 4:5 format, "
+                    f"centered elements respecting a 1:1 square safe zone (1080x1080 px) "
+                    f"for Instagram grid preview. "
+                    f"Bold Brand Blue #007799 text overlay with vibrant yellow #FFC20E "
+                    f"marker highlight, modern geometric sans-serif typography. "
+                    f"Official 'Ensina Mais Turma da Mônica' logo badge at the bottom corner. "
+                    f"No cartoon characters, generic minimalist line-art icons only. "
+                    f"text overlay in Brazilian Portuguese: '{overlay_texto}'. "
+                    f"{_FRASE_TAG}"
+                )
+                slide["usa_foto_real"] = True
+                slide["tipo_foto"] = tipo
+                _normaliza_refs(slide, tipo)
                 if corrigidos is not None:
-                    corrigidos.append(f"slide {snum}: padrões genéricos removidos / tag de navegação garantida")
-            slide["usa_foto_real"] = True
-            if slide.get("tipo_foto") not in _CENAS_FOTO:
-                slide["tipo_foto"] = _TIPOS_RODIZIO[snum]
-            _normaliza_refs(slide, slide["tipo_foto"])
-            continue
+                    corrigidos.append(
+                        f"slide {snum}: prompt_en reescrito com foto real ({tipo})"
+                    )
 
-        # ── Slide NÃO-conforme: reescrever o prompt_en ──────────────────
-        logger.info(
-            "Slide %d: prompt_en não iniciava com 'Authentic school photo'. "
-            "Reescrevendo automaticamente.",
-            snum,
-        )
-
-        tipo = slide.get("tipo_foto")
-        if tipo not in _CENAS_FOTO:
-            tipo = _TIPOS_RODIZIO[snum]
-        cena = _CENAS_FOTO[tipo]
-
-        # Extrai o trecho "text overlay in Brazilian Portuguese: '...'"
-        # do prompt original, se existir (só o que está entre aspas — a frase
-        # da tag pode vir depois do overlay e não pode entrar no texto)
-        overlay_match = re.search(
-            r"text overlay in Brazilian Portuguese:\s*['\"]([^'\"]+)['\"]",
-            prompt_en,
-            re.IGNORECASE,
-        )
-        overlay_texto = overlay_match.group(1).strip() if overlay_match else overlay
-
-        # Monta o prompt correto (regras 2, 5, 6 e 7)
-        novo_prompt = (
-            f"Authentic school photo of {cena}, "
-            f"1080x1350 px vertical 4:5 format, "
-            f"centered elements respecting a 1:1 square safe zone (1080x1080 px) "
-            f"for Instagram grid preview. "
-            f"Bold Brand Blue #007799 text overlay with vibrant yellow #FFC20E "
-            f"marker highlight, modern geometric sans-serif typography. "
-            f"Official 'Ensina Mais Turma da Mônica' logo badge at the bottom corner. "
-            f"No cartoon characters, generic minimalist line-art icons only. "
-            f"text overlay in Brazilian Portuguese: '{overlay_texto}'. "
-            f"{_FRASE_TAG}"
-        )
-
-        slide["prompt_en"] = novo_prompt
-        slide["usa_foto_real"] = True
-        slide["tipo_foto"] = tipo
-        slide.setdefault("tag_navegacao", TAG_NAVEGACAO)
-        _normaliza_refs(slide, tipo)
-        if corrigidos is not None:
-            corrigidos.append(f"slide {snum}: prompt_en reescrito com foto real ({tipo})")
+        _normaliza_refs(slide, slide.get("tipo_foto"))
+        _garantir_regras(slide, corrigidos)
 
     return dados
+
+
+def normalizar_prompts(dados: dict) -> dict:
+    """Normaliza um payload de prompts (inclusive gerações antigas do histórico)."""
+    return _enforce_foto_real(dados)
 
 
 def _ctx_ideia(ideia: dict) -> str:

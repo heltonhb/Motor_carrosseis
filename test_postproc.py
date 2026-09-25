@@ -56,8 +56,13 @@ def test_preserva_overlay_e_slide_nao_thumbnail():
     s1 = res["slides"][0]
     assert "A diferença entre usar tecnologia e saber programá-la" in s1["prompt_en"]
     s8 = res["slides"][2]
-    assert s8["prompt_en"] == "Final CTA slide with green pill button."
+    # texto original preservado, com as cláusulas das regras 5 e 7 acrescentadas
+    assert s8["prompt_en"].startswith("Final CTA slide with green pill button.")
+    assert "text overlay in Brazilian Portuguese" in s8["prompt_en"]
+    assert "no cartoon characters" in s8["prompt_en"].lower()
+    # regra 6: slide 8 sem tag, campo em string vazia
     assert _FRASE_TAG not in s8["prompt_en"]
+    assert s8["tag_navegacao"] == ""
 
 
 def test_referencias_limpas_e_validas():
@@ -88,3 +93,58 @@ def test_payload_invalido_passa_adiano():
 
 def test_tag_constante():
     assert TAG_NAVEGACAO == "Mova para o próximo ➔"
+
+
+# ─── Regressão: payload legado sem foto real no slide 1 ─────────────────────
+
+_PAYLOAD_LEGADO = {
+    "slides": [
+        {
+            "slide_num": 1,
+            "prompt_en": (
+                "Modern friendly geometric sans-serif typography on a soft "
+                "off-white #F7F9FF background. Centered elements respecting a "
+                "1:1 square safe zone for Instagram grid preview. A floating "
+                "white card with 24px rounded corners and subtle diffuse "
+                "shadows. On the card, a bold title in Brand Blue #007799 with "
+                "key words highlighted with a vibrant yellow #FFC20E marker "
+                "line. Minimalist line-art icon of a glowing brain and laptop, "
+                "no cartoon characters. Clean, professional look. "
+                "Text overlay in Brazilian Portuguese: 'Usar tecnologia vs. "
+                "Programar tecnologia: Qual o futuro do seu filho?'"
+            ),
+            "prompt_pt": "",
+            "text_overlay": "Usar tecnologia vs. Programar tecnologia: Qual o futuro do seu filho?",
+        }
+    ]
+}
+
+
+def test_payload_legado_slide_1_vira_foto_real():
+    from copy import deepcopy
+
+    from batch_engine import normalizar_prompts
+
+    res = normalizar_prompts(deepcopy(_PAYLOAD_LEGADO))
+    s1 = res["slides"][0]
+    assert s1["prompt_en"].lower().startswith("authentic school photo")
+    assert "off-white" not in s1["prompt_en"].lower()
+    assert "floating white card" not in s1["prompt_en"].lower()
+    assert _FRASE_TAG in s1["prompt_en"]
+    assert "no cartoon characters" in s1["prompt_en"].lower()
+    assert s1["tag_navegacao"] == TAG_NAVEGACAO
+    assert s1["prompt_pt"]
+    assert s1["referencias"] and s1["tipo_foto"] in CENAS_FOTO
+    # overlay original preservado dentro do prompt
+    assert "Usar tecnologia vs." in s1["prompt_en"]
+
+
+def test_normalizar_prompts_e_idempotente():
+    from copy import deepcopy
+
+    from batch_engine import normalizar_prompts
+
+    res = normalizar_prompts(deepcopy(_PAYLOAD_LEGADO))
+    snapshot = [dict(s) for s in res["slides"]]
+    normalizar_prompts(res)
+    assert res["slides"] == snapshot

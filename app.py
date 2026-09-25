@@ -25,6 +25,7 @@ from batch_engine import (
     gerar_cronograma,
     gerar_legendas_ideia,
     gerar_prompts_ideia,
+    normalizar_prompts,
     processar_lote,
 )
 from config import (
@@ -1419,6 +1420,9 @@ with tab3:
             prompts = item_p.get("prompts") if "prompts" in item_p else item_p
             if not isinstance(prompts, dict):
                 prompts = {}
+            else:
+                # Normaliza gerações antigas (foto real, tag e cláusulas) — idempotente
+                prompts = normalizar_prompts(prompts)
 
             # Validação na exibição (cobre gerações restauradas do histórico;
             # gerações novas já trazem os avisos finais salvos no item)
@@ -2131,6 +2135,8 @@ with tab7:
             if prompts_items:
                 st.markdown("#### 🎨 Prompts Gerados")
                 for _key, item in prompts_items.items():
+                    if isinstance(item.get("prompts"), dict):
+                        item["prompts"] = normalizar_prompts(item["prompts"])
                     with st.expander(f"📋 {item['titulo']}", expanded=False):
                         for corr in item.get("corrigidos") or []:
                             st.success(f"🛠️ {corr}")
