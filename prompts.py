@@ -13,6 +13,16 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from config import TAG_NAVEGACAO
+from refs_catalog import (
+    CENAS_FOTO,
+    arquivo_principal,
+    cena_valida,
+    chaves_cenas,
+    rotulo,
+    texto_catalogo_para_prompt,
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # IDENTIDADE VISUAL — FONTE ÚNICA (padroesVisuais.txt)
 # A especificação completa mora no arquivo .txt ao lado; este módulo só a
@@ -79,8 +89,9 @@ SYSTEM_INSTRUCTION_PERSONA = """Você é a CAROL — Consultora de Aceleração 
 3. Nunca invente depoimentos com nomes falsos de pessoas físicas. Use: "Depoimento real de família do Tatuapé" ou "Caso de aluno do Ensino Fundamental"
 4. Todo texto visível em imagem DEVE ser em PORTUGUÊS DO BRASIL
 5. Prompts de geração de imagem (prompt_en) devem ser em INGLÊS
-6. "Arraste para o lado ➔" — SEMPRE em português, nunca "Swipe" ou "Slide"
+6. A tag de navegação "Mova para o próximo ➔" deve aparecer nos slides 1 a 7 e nunca no último slide
 7. No conteúdo orgânico, sempre combine a chamada comercial com um gatilho de compartilhamento entre pais (Direct) ou comando de re-leitura ("volte ao slide X") para maximizar tempo de retenção
+8. SLIDES THUMBNAIL (1, 4 e 5): devem ser composições de foto real da unidade Tatuapé (recepção ou alunos em atividades) + texto curto de 3-8 palavras para engajar e despertar interesse — nunca banco de imagens, ilustração ou cena genérica gerada por IA
 
 ═══ KPIs QUE VOCÊ PERSEGUE ═══
 • Salvamentos ≥ 4% (eixo Didático)
@@ -91,6 +102,7 @@ SYSTEM_INSTRUCTION_PERSONA = """Você é a CAROL — Consultora de Aceleração 
 ═══ FORMATO PADRÃO DOS CARROSSÉIS ═══
 • 1080 x 1350 px (4:5 vertical) — 8 lâminas
 • Safe Zone 1:1 na Capa: títulos e elementos vitais centralizados na área 1080 x 1080 px para preservação perfeita na grade do perfil
+• THUMBNAILS COM FOTO REAL (slides 1, 4 e 5): composição de texto curto (3-8 palavras, para engajar ou despertar interesse) sobre fotos reais da unidade Tatuapé — recepção ou alunos em atividades. Essas 3 lâminas seguem a mesma receita visual: foto real + overlay de texto curto que interrompe o scroll.
 • Máximo 2 carrosséis/semana (Terça + Sexta)
 • Janela de 72h entre posts no feed
 • Horários: 11h30-13h00 ou 18h30-20h00
@@ -100,7 +112,7 @@ A spec completa mora no padroesVisuais.txt e é injetada no prompt de geração 
 • Azul Brand (#007799 / #0084B4): títulos e barras · Verde Ação (#58B947): CTA/WhatsApp · Laranja/Amarelo (#F58220 / #FFC20E): badges e marca-texto.
 • Pastel por curso: azul claro (Matemática), coral (Português), laranja suave (Programação), verde lima (Robótica). Fundos #F7F9FF / #EEF4FF, cards #FFFFFF, texto #1E293B.
 • Fonte sans-serif geométrica (Plus Jakarta Sans / Poppins), bordas 12-24px, sombras suaves, ícones minimalistas em círculos coloridos.
-• Texto visível em imagem: PT-BR, 35-45 palavras por tela. Prompts de geração de imagem: INGLÊS.
+• Texto visível em imagem: PT-BR — 35-45 palavras por tela nos slides do roteiro renderizados; em prompts de imagem o text_overlay é curto (≤15 palavras; thumbnails 1, 4 e 5: 3-8 palavras). Prompts de geração de imagem: INGLÊS.
 
 Sempre retorne EXCLUSIVAMENTE JSON válido quando solicitado."""
 
@@ -195,9 +207,10 @@ Use pelo menos 4 destes tipos entre as 6 ideias:
 6. CONTRASTE ANTES x DEPOIS: Evolução clara
 
 ─── 3. ESTRUTURA DE 8 SLIDES COM RETENÇÃO MAGNÉTICA ───
-• Slide 1 (Capa): Hook conciso e magnético, 6-12 palavras de alto impacto (perfeito na Safe Zone 1:1, legível no celular)
+• Slide 1 (Capa/thumbnail): Composição de thumbnail com uma das fotos reais anexadas pelo usuário — recepção da unidade ou alunos em atividade — e texto curto de 3-8 palavras, desenhado para interromper o scroll e despertar interesse (perfeito na Safe Zone 1:1, legível no celular)
 • Slide 2 (Tensão): Aprofunda a dor da família + abre open loop instigante
-• Slide 3-5 (Entrega): Revelações práticas, passos aplicáveis, método contraintuitivo (alto valor para salvamento)
+• Slide 3 (Entrega): Revelação prática ou contexto que prepara a aplicação
+• Slides 4 e 5 (Thumbnails de aplicação): Repetir a receita do slide 1 — uma das fotos reais anexadas pelo usuário, da recepção da unidade ou de alunos em atividade, + composição de texto curto de 3-8 palavras, com gancho visual forte e conexão direta com o tema
 • Slide 6 (Aplicação/Ponte): Como aplicar na prática através do método individualizado da Ensina Mais (mantém entrega de valor alto, sem quebra brusca para autopromoção)
 • Slide 7 (Transformação/Prova): Caso real de aluno, superação ou depoimento acolhedor integrado à unidade física (Rua Coelho Lisboa, 783)
 • Slide 8 (CTA + Loop Orgânico): Palavra-chave + WhatsApp (11) 94475-0009 + gatilho de re-leitura ("volte ao slide X") ou envio por direct para o outro responsável
@@ -372,6 +385,18 @@ def _tokens_significativos(texto: str) -> set[str]:
 
 _HEX_RE = re.compile(r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?")
 
+# Padrões de layout genérico proibidos nos slides thumbnail (foto real).
+# Fonte única: prompts.py exporta, batch_engine.py consome (antes havia duas
+# listas ligeiramente diferentes nos dois arquivos).
+PADROES_PROIBIDOS_FOTO = (
+    "off-white background",
+    "floating white card",
+    "soft background",
+)
+
+# Cláusula obrigatória em TODO prompt_en (regra 7 — personagens).
+CLAUSULA_SEM_PERSONAGENS = "no cartoon characters"
+
 
 def cor_eh_valida(cor) -> bool:
     """True se `cor` é um hex CSS seguro (#RGB/#RRGGBB) para style/HTML."""
@@ -381,14 +406,21 @@ def cor_eh_valida(cor) -> bool:
 def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
     """
     Valida a saída da geração de prompts de imagem contra as regras do prompt:
-    - 8 slides com prompt_en e text_overlay preenchidos
-    - prompt_en declara "text overlay in Brazilian Portuguese" (regra 1/4)
-    - text_overlay ≤ 15 palavras, sem "Arraste para o lado"/"Swipe" (regras 5/6)
-    - nenhum personagem da Turma da Mônica (regra 1 — a marca do logo é permitida)
+    - 8 slides com prompt_en, prompt_pt e text_overlay preenchidos
+    - prompt_en declara "text overlay in Brazilian Portuguese" (regra 5)
+    - text_overlay ≤ 15 palavras (regra 4), sem a tag de navegação/"Swipe"
+    - tag "Mova para o próximo ➔" no prompt_en dos slides 1-7 e AUSENTE no 8
+      (regra 6 — a tag é gerada pelo Flow, não é camada separada aqui)
+    - cláusula "no cartoon characters" em todo prompt_en (regra 7)
+    - nenhum personagem da Turma da Mônica (a marca do logo é permitida)
+    - referências por slide presentes e válidas no catálogo refs/catalogo.json
+      (regra 11); slides 1, 4, 5 e 7 precisam de cena fotográfica real
+    - slides 1, 4 e 5 com foto real (prompt_en começa com "authentic school
+      photo", sem padrões genéricos) — regras 2/11
     - último slide com o WhatsApp (CTA inviolável)
     - com a ideia de origem: overlay deriva do texto aprovado do slide (fidelidade)
     - paleta com valores hex válidos (swatch do app só pinta hex — safety anti-XSS)
-    - base_prompt presente e com os hexes da marca (consistência entre as lâminas)
+    - base_prompt presente, com os hexes da marca e sem texto de slide específico
     Retorna lista de avisos — vazia quando tudo está certo.
     """
     if not isinstance(dados, dict):
@@ -429,6 +461,20 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                 + ", ".join("#" + h for h in faltando)
                 + ") — regra 9."
             )
+        # base_prompt não pode embutir texto de um slide específico
+        bp_low = base_prompt.lower()
+        for slide in slides:
+            texto_slide = (slide.get("text_overlay") or "").strip()
+            if len(texto_slide.split()) >= 3 and texto_slide.lower() in bp_low:
+                avisos.append(
+                    f'⚠️ base_prompt contém o texto do slide {slide.get("slide_num", "?")} — '
+                    "deve valer igual para as 8 lâminas (regra 9)."
+                )
+                break
+        if TAG_NAVEGACAO.lower() in bp_low:
+            avisos.append(
+                "⚠️ base_prompt contém a tag de navegação — ela é específica de cada lâmina (regra 9)."
+            )
 
     # Mapa slide → texto aprovado na ideia de origem (chave "slide", não "slide_num")
     ideia_slides: dict = {}
@@ -440,22 +486,105 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
     for slide in slides:
         snum = slide.get("slide_num", "?")
         pen = (slide.get("prompt_en") or "").strip()
+        pen_low = pen.lower()
         overlay = (slide.get("text_overlay") or "").strip()
+        overlay_low = overlay.lower()
+        is_ultimo = snum == 8
 
         if not pen:
             avisos.append(f"⚠️ Slide {snum}: prompt_en vazio.")
             continue
+        if not (slide.get("prompt_pt") or "").strip():
+            avisos.append(f"⚠️ Slide {snum}: prompt_pt vazio — descreva o slide em PT-BR.")
         if not overlay:
             avisos.append(f"⚠️ Slide {snum}: text_overlay vazio.")
-        if "brazilian portuguese" not in pen.lower():
-            avisos.append(f'⚠️ Slide {snum}: prompt_en sem a cláusula "text overlay in Brazilian Portuguese".')
-        if "arraste para o lado" in overlay.lower():
-            avisos.append(f'⚠️ Slide {snum}: "Arraste para o lado" é camada separada — não deve estar no text_overlay.')
-        if "swipe" in overlay.lower():
-            avisos.append(f'⚠️ Slide {snum}: use "Arraste para o lado ➔" em PT-BR, nunca "Swipe".')
+        if "brazilian portuguese" not in pen_low:
+            avisos.append(f'⚠️ Slide {snum}: prompt_en sem a cláusula "text overlay in Brazilian Portuguese" (regra 5).')
         n_palavras = len(overlay.split())
         if n_palavras > 15:
-            avisos.append(f"⚠️ Slide {snum}: text_overlay com {n_palavras} palavras (máximo 15).")
+            avisos.append(f"⚠️ Slide {snum}: text_overlay com {n_palavras} palavras (máximo 15) — regra 4.")
+
+        # ── Tag de navegação: no prompt_en (1-7), nunca no overlay, nada no 8 ──
+        if "arraste para o lado" in overlay_low or TAG_NAVEGACAO.lower() in overlay_low:
+            avisos.append(
+                f'⚠️ Slide {snum}: a tag "{TAG_NAVEGACAO}" não deve estar no text_overlay — '
+                "ela é elemento próprio do prompt_en (regra 6)."
+            )
+        if "swipe" in overlay_low:
+            avisos.append(f'⚠️ Slide {snum}: use "{TAG_NAVEGACAO}" em PT-BR, nunca "Swipe".')
+        if not is_ultimo:
+            if "arraste para o lado" in pen_low:
+                avisos.append(f'⚠️ Slide {snum}: use "{TAG_NAVEGACAO}", nunca "Arraste para o lado" (regra 6).')
+            if "swipe" in pen_low:
+                avisos.append(f'⚠️ Slide {snum}: use "{TAG_NAVEGACAO}" em PT-BR, nunca "Swipe" (regra 6).')
+            if TAG_NAVEGACAO.lower() not in pen_low:
+                avisos.append(
+                    f'⚠️ Slide {snum}: prompt_en sem a tag "{TAG_NAVEGACAO}" no canto inferior direito '
+                    "(regra 6 — o Flow gera a tag junto com a imagem)."
+                )
+        else:
+            if TAG_NAVEGACAO.lower() in pen_low:
+                avisos.append("⚠️ Slide 8 (CTA): prompt_en não deve ter a tag de navegação (regra 6).")
+
+        # Campo JSON da tag (fonte de verdade para o app/export)
+        tag_json = slide.get("tag_navegacao")
+        if tag_json is None:
+            avisos.append(f'⚠️ Slide {snum}: campo "tag_navegacao" ausente (regra 6).')
+        else:
+            esperada = "" if is_ultimo else TAG_NAVEGACAO
+            if str(tag_json) != esperada:
+                avisos.append(
+                    f'⚠️ Slide {snum}: "tag_navegacao" deveria ser '
+                    f'{"string vazia" if esperada == "" else f"{esperada!r}"} (regra 6).'
+                )
+
+        # ── Regra 7: cláusula anti-personagem obrigatória em todo prompt_en ──
+        if CLAUSULA_SEM_PERSONAGENS not in pen_low:
+            avisos.append(
+                f'⚠️ Slide {snum}: prompt_en sem "{CLAUSULA_SEM_PERSONAGENS}" (regra 7).'
+            )
+
+        if snum in {1, 4, 5}:
+            if slide.get("usa_foto_real") is not True:
+                avisos.append(f"⚠️ Slide {snum}: deve usar uma foto real da unidade (usa_foto_real: true) — regra 2.")
+            if slide.get("tipo_foto") not in CENAS_FOTO:
+                avisos.append(
+                    f"⚠️ Slide {snum}: tipo_foto deve ser uma cena fotográfica real do catálogo "
+                    f"({', '.join(CENAS_FOTO)})."
+                )
+            if not pen_low.startswith("authentic school photo"):
+                avisos.append(
+                    f'⚠️ Slide {snum}: prompt_en DEVE COMEÇAR com '
+                    '"Authentic school photo of..." — foto real é obrigatória (regra 2).'
+                )
+            # Detectar padrões proibidos que indicam layout genérico (sem foto real)
+            for padrao in PADROES_PROIBIDOS_FOTO:
+                if padrao in pen_low:
+                    avisos.append(
+                        f'⚠️ Slide {snum}: prompt_en contém "{padrao}" — '
+                        "slides thumbnail (1, 4, 5) devem ter foto real como fundo, não layout genérico (regra 2)."
+                    )
+                    break
+            if len(overlay.split()) > 8:
+                avisos.append(f"⚠️ Slide {snum}: thumbnail deve ter texto curto de até 8 palavras.")
+
+        # ── Regra 11: referências de imagem por slide (catálogo refs/catalogo.json) ──
+        refs = slide.get("referencias")
+        if not isinstance(refs, list) or not refs:
+            avisos.append(f'⚠️ Slide {snum}: "referencias" vazia — sugira ao menos 1 cena do catálogo (regra 11).')
+        else:
+            desconhecidas = [r for r in refs if not cena_valida(r)]
+            if desconhecidas:
+                avisos.append(
+                    f"⚠️ Slide {snum}: referência fora do catálogo: "
+                    + ", ".join(repr(r) for r in desconhecidas)
+                    + f" — válidas: {', '.join(chaves_cenas()) or 'catálogo indisponível'} (regra 11)."
+                )
+            if snum in {1, 4, 5, 7} and not any(r in CENAS_FOTO for r in refs if isinstance(r, str)):
+                avisos.append(
+                    f"⚠️ Slide {snum}: precisa referenciar uma foto real da unidade "
+                    f"(ex.: {', '.join(CENAS_FOTO[:3])}) — regra 11."
+                )
 
         # Personagens da Turma da Mônica (remove a marca do logo antes de buscar)
         livre = f"{pen} {slide.get('prompt_pt', '')} {overlay}".lower()
@@ -476,7 +605,7 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                 if inter < 0.4:
                     avisos.append(
                         f"⚠️ Slide {snum}: text_overlay não deriva do texto aprovado "
-                        f"({inter:.0%} de palavras em comum) — revise a fidelidade ao roteiro."
+                        f"({inter:.0%} de palavras em comum) — revise a fidelidade ao roteiro (regra 8)."
                     )
 
     # CTA inviolável: último slide com o WhatsApp
@@ -495,29 +624,45 @@ PROMPT_PROMPTS_IMAGEM = (
 ─── PADRÃO VISUAL E IDENTIDADE DA MARCA (fonte única: padroesVisuais.txt — não duplique) ───
 {PADRAO_VISUAL}
 
-─── ATIVOS FOTOGRÁFICOS REAIS ───
-• Fachada: portão branco, balões, painel oficial da Turma da Mônica (referência fotográfica real — use fielmente, não recrie do zero)
-• Laboratório: aluna montando robótica na mesa amarela + aluno programando no laptop
+─── ATIVOS FOTOGRÁFICOS REAIS (catálogo único: refs/catalogo.json) ───
+Estas são as ÚNICAS fotos reais da unidade que podem ser sugeridas como referência. Chave = valor do campo "referencias" de cada slide:
+{texto_catalogo_para_prompt()}
+Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de imagens nem cenas inventadas.
 
-─── ESTRUTURA POR TIPO DE SLIDE ───
-• SLIDE 1 (Capa): Fundo suave (#F7F9FF), tipografia geométrica de impacto em Azul Brand (#007799), palavra-chave com traço/marca-texto amarelo (#FFC20E), card flutuante branco com cantos arredondados (16-24px), selo do logo no rodapé. SAFE ZONE 1:1 OBRIGATÓRIA: todo o título e texto principal devem ficar centralizados na área 1080x1080 px para visualização limpa na grade do perfil do Instagram sem cortes.
-• SLIDE 2 (Segunda Capa): Fundo contrastante em Azul Brand (#007799 / #0084B4), tipografia branca e amarelo vibrante, transições orgânicas em curva — funciona como capa alternativa no feed.
-• SLIDES 3-5 (Entrega): Cards disciplinares flutuantes (branco puro #FFFFFF com toques pastel da disciplina: azul claro, laranja, coral ou verde lima), diagramas, passos com ícones minimalistas em círculos coloridos.
-• SLIDE 6 (Ponte): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
-• SLIDE 7 (Escola Real): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas.
-• SLIDE 8 (CTA): Fundo suave, botão pill em Verde Ação (#58B947) ("Agende uma aula experimental gratuita" / WhatsApp (11) 94475-0009), ícones minimalistas de salvar + compartilhar DM.
+─── ESTRUTURA POR TIPO DE SLIDE (com a referência típica de cada lâmina) ───
+• SLIDE 1 (Capa / Thumbnail de abertura — FOTO REAL OBRIGATÓRIA; referência típica: "fachada" ou "recepcao_unidade"): thumbnail construída SOBRE uma foto real da unidade. A foto real é o elemento dominante do slide — ocupa a maior parte do quadro. Sobre ela, aplique texto curto de 3-8 palavras em tipografia geométrica de impacto (Azul Brand #007799, com marca-texto amarelo #FFC20E), legível no celular, centralizado na Safe Zone 1:1 (1080×1080 px) para preservação na grade do perfil. Selo do logo no rodapé. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]" — NUNCA fundo genérico, card flutuante sozinho ou cena ilustrada/gerada por IA.
+• SLIDE 2 (Segunda Capa; referência típica: a cena de atividade que traduz o tema — ex.: "alunos_robotica" para um carrossel de robótica, "aluno_programacao" para programação, "alunos_apoio" para apoio escolar): Fundo contrastante em Azul Brand (#007799 / #0084B4), tipografia branca e amarelo vibrante, transições orgânicas em curva — funciona como capa alternativa no feed.
+• SLIDE 3 (Entrega; referência típica: a cena da disciplina do tema, ex.: "alunos_apoio", "alunos_robotica", "aluno_programacao"): Cards disciplinares flutuantes (branco puro #FFFFFF com toques pastel da disciplina: azul claro, laranja, coral ou verde lima), diagramas, passos com ícones minimalistas em círculos coloridos.
+• SLIDE 4 (Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
+• SLIDE 5 (Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
+• SLIDE 6 (Ponte; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
+• SLIDE 7 (Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas.
+• SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) ("Agende uma aula experimental gratuita" / WhatsApp (11) 94475-0009), ícones minimalistas de salvar + compartilhar DM.
 
 ─── REGRAS DO PROMPT ───
 1. prompt_en em INGLÊS, text_overlay em PORTUGUÊS DO BRASIL.
-2. No prompt_en: descreva explicitamente a estética (modern friendly geometric sans-serif typography, centered elements respecting a 1:1 square safe zone for Instagram grid preview, floating white cards with 16-24px rounded corners, subtle diffuse shadows, soft off-white background #F7F9FF, Brand Blue #007799 headers, Action Green #58B947 pill buttons for CTAs, vibrant yellow/orange #FFC20E highlights, pastel cards, organic curve transitions, minimalist line icons in colored circles).
-3. text_overlay: máximo 15 palavras, fonte bold, legível em celular.
-4. No prompt_en, inclua: "text overlay in Brazilian Portuguese: [TEXTO]".
-5. "Arraste para o lado ➔" é camada SEPARADA no canto inferior direito — NÃO faz parte do text_overlay.
-6. Fotos reais: use "authentic school photo" no prompt_en. Fidelidade absoluta à fachada.
+2. ⛔ SLIDES 1, 4 e 5 — FOTO REAL DA ESCOLA (REGRA PRIORITÁRIA, leia antes de qualquer outra):
+   Esses 3 slides são THUMBNAILS construídos SOBRE uma foto real da unidade. O prompt_en desses slides DEVE OBRIGATORIAMENTE:
+   (a) COMEÇAR com "Authentic school photo of [cena real: reception area / students doing robotics / etc.]" — esta é a primeira frase do prompt, sem exceção;
+   (b) Descrever a foto real como elemento dominante (ocupa a maior parte do quadro);
+   (c) Incluir o texto curto (3-8 palavras) como overlay SOBRE a foto;
+   (d) Marcar "usa_foto_real": true e "tipo_foto" com UMA cena fotográfica do catálogo (ex.: "recepcao_unidade", "alunos_robotica", "aluno_programacao", "alunos_apoio") no JSON.
+   ⛔ PROIBIDO nos slides 1, 4 e 5: "soft off-white background", "floating white card", "soft background", fundo liso genérico ou cena 100% gerada por IA. Esses elementos são exclusivos dos slides 2, 3, 6, 7 e 8.
+   ✅ CORRETO (slide 1): "Authentic school photo of students working on robotics at a yellow table in a bright classroom, with bold Brand Blue #007799 text overlay in Brazilian Portuguese: 'Seu filho programa o futuro dele.' No cartoon characters."
+   ❌ ERRADO (slide 1): "Modern educational slide, soft off-white background #F7F9FF, floating white card with 24px rounded corners..."
+3. ESTÉTICA DOS SLIDES 2, 3, 6, 7 e 8 (NÃO se aplica aos slides 1, 4 e 5 — eles usam foto real, veja regra 2). No prompt_en desses slides: descreva explicitamente a estética (modern friendly geometric sans-serif typography, centered elements respecting a 1:1 square safe zone for Instagram grid preview, floating white cards with 16-24px rounded corners, subtle diffuse shadows, soft off-white background #F7F9FF, Brand Blue #007799 headers, Action Green #58B947 pill buttons for CTAs, vibrant yellow/orange #FFC20E highlights, pastel cards, organic curve transitions, minimalist line icons in colored circles).
+4. text_overlay: máximo 15 palavras, fonte bold, legível em celular.
+5. No prompt_en, inclua: "text overlay in Brazilian Portuguese: [TEXTO]".
+6. TAG DE NAVEGAÇÃO — GERADA JUNTO COM A IMAGEM: o prompt_en dos slides 1 a 7 DEVE incluir uma frase em inglês instruindo o texto discreto no canto inferior direito, exatamente neste formato: "In the bottom right corner, a small discreet text in Brazilian Portuguese says '{TAG_NAVEGACAO}'." A tag é PT-BR e nunca é traduzida (proibido "Swipe" e "Arraste para o lado"), NUNCA faz parte do text_overlay e NUNCA aparece no slide 8. No campo "tag_navegacao" use exatamente "{TAG_NAVEGACAO}" nos slides 1 a 7 e uma string vazia no slide 8.
 7. PERSONAGENS — REGRA DUPLA: PERMITIDO (fotográfico) referenciar o logo oficial "Ensina Mais Turma da Mônica" e o painel real da fachada — use como referência fiel, não os recrie. PROIBIDO (gerado): em todo prompt_en declare "no cartoon characters — generic minimalist line-art icons only" e NUNCA gere personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu) — a marca no nome do logo é permitida; os personagens, nunca.
 8. FIDELIDADE AO ROTEIRO: o contexto traz a lista "Slides" com o campo "texto" de cada lâmina aprovada. Cada text_overlay DEVE ser um resumo de até 15 palavras DO TEXTO DO SLIDE CORRESPONDENTE (mesmo gancho e mensagem) — NUNCA invente frases que não estejam no roteiro.
 9. BASE_PROMPT PARA CONSISTÊNCIA: gere também o campo "base_prompt" (em inglês) com APENAS o estilo compartilhado das 8 lâminas — fundo, tipografia, paleta com os hexes #007799, #58B947 e #FFC20E, bordas, sombras, ícones e transições. SEM texto sobreposto e SEM elementos de um slide específico: tem que valer igual para todas as lâminas.
-10. GERAÇÃO EM SÉRIE: no "dicas_gerais", instrua o usuário a gerar o SLIDE 1 primeiro e usá-lo como imagem de referência/estilo (e o mesmo seed, quando a ferramenta permitir) para os slides 2 a 8 — é isso que mantém o carrossel coeso no ImageFX/Flow."""
+10. "dicas_gerais" — ESPECÍFICO DESTE CARROSSEL: registre só o que muda de uma geração para outra: a ordem das 8 lâminas, qual referência de foto usar em cada uma e algum cuidado particular do tema. A receita de coesão (gerar o SLIDE 1 primeiro e usá-lo como imagem de referência/estilo para os slides 2 a 8 no Google Flow) é FIXA e vem do próprio app — não repita aqui.
+11. REFERÊNCIA DE IMAGEM POR SLIDE (campo "referencias"): para CADA slide escolha 1 ou 2 chaves do catálogo de fotos acima — é o que o usuário vai anexar como imagem de referência no Google Flow para gerar aquela lâmina. Regras:
+   (a) slides 1, 4, 5 e 7: OBRIGATORIAMENTE ≥1 cena fotográfica real da unidade (fachada, recepcao_unidade, equipe, alunos_robotica, aluno_programacao, alunos_apoio, laboratorio) — nunca só "logo";
+   (b) slide 7: deve incluir "fachada";
+   (c) a cena deve traduzir o CONTEÚDO do slide (robótica → "alunos_robotica"; programação → "aluno_programacao"; apoio/reforço → "alunos_apoio"; identidade/prova → "fachada");
+   (d) use EXATAMENTE as chaves do catálogo, em minúsculas — qualquer valor fora da lista é inválido."""
     + """
 
 Retorne JSON:
@@ -529,9 +674,10 @@ Retorne JSON:
       "prompt_pt": "...",
       "text_overlay": "...",
       "estilo": "...",
-      "usa_foto_real": false,
-      "tipo_foto": null,
-      "referencias": ["logo", "fachada"]
+      "usa_foto_real": true,
+      "tipo_foto": "fachada",
+      "referencias": ["fachada", "logo"],
+      "tag_navegacao": "Mova para o próximo ➔"
     }
   ],
   "paleta_cores": {
@@ -550,6 +696,55 @@ Retorne JSON:
   "dicas_gerais": "..."
 }"""
 )
+
+
+# ─── Exportação da série para o Google Flow ─────────────────────────────────
+DICAS_SERIE_FLOW = """Como gerar as 8 lâminas no Google Flow:
+1. Gere primeiro o SLIDE 1: cole o prompt dele e anexe as fotos de referência indicadas.
+2. Nos slides 2 a 8, anexe também a imagem gerada do slide 1 junto com as referências daquela lâmina — é ela que mantém estilo, tipografia e paleta coesos no carrossel.
+3. Use só as fotos do catálogo (refs/) como referência — nada de banco de imagens.
+4. Confira o canto inferior direito: a tag "Mova para o próximo ➔" aparece nos slides 1 a 7 e fica fora do slide 8.
+5. O app não gera imagem: baixe cada lâmina em 1080x1350 px (4:5) e monte o carrossel na ordem 1→8."""
+
+
+def formatar_txt_prompts(dados: dict) -> str:
+    """Export .txt: base prompt, dicas de série e uma seção por lâmina (pronta para colar no Flow)."""
+    if not isinstance(dados, dict):
+        return ""
+    linhas: list[str] = ["CARROSSEL — PROMPTS PARA O GOOGLE FLOW", ""]
+    base = (dados.get("base_prompt") or "").strip()
+    if base:
+        linhas += ["## BASE PROMPT (envie junto com o prompt de cada lâmina)", base, ""]
+    linhas += ["## COMO GERAR A SÉRIE", DICAS_SERIE_FLOW, ""]
+
+    for slide in dados.get("slides") or []:
+        if not isinstance(slide, dict):
+            continue
+        prompt_en = (slide.get("prompt_en") or "").strip()
+        if not prompt_en:
+            continue
+        refs_txt = "; ".join(_linha_referencia(c) for c in slide.get("referencias") or [])
+        linhas += [
+            f"## SLIDE {slide.get('slide_num', '?')}",
+            f"Referências: {refs_txt or '—'}",
+            prompt_en,
+        ]
+        overlay = (slide.get("text_overlay") or "").strip()
+        if overlay:
+            linhas.append(f"Text overlay (PT-BR): {overlay}")
+        linhas.append("")
+
+    dicas = (dados.get("dicas_gerais") or "").strip()
+    if dicas:
+        linhas += ["## DICAS DESTE CARROSSEL", dicas, ""]
+    return "\n".join(linhas).rstrip() + "\n"
+
+
+def _linha_referencia(chave: str) -> str:
+    """'fachada — Fachada da escola [refs/Fachada.png]' (arquivo quando existe)."""
+    rot = rotulo(chave)
+    arq = arquivo_principal(chave)
+    return f"{chave} — {rot}" + (f" [{arq}]" if arq else "")
 
 
 # ─── Legendas com Copywriting Estruturado ────────────────────────────────────

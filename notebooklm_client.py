@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 
 import streamlit as st
 
@@ -62,11 +63,19 @@ def check_auth() -> tuple[bool, str]:
     Verifica se o CLI está autenticado com o NotebookLM.
     Retorna (autenticado, mensagem_de_status).
     """
+    cache_key = "_nlm_auth_cache"
+    cached = st.session_state.get(cache_key)
+    if isinstance(cached, dict) and cached.get("expires_at", 0) > time.time():
+        return cached["value"]
+
     cmd = _nlm_cmd("auth", "check")
     stdout, stderr, code = _run_cmd(cmd)
     if code == 0:
-        return True, stdout.strip() or "autenticado"
-    return False, (stderr.strip() or "não autenticado")
+        value = (True, stdout.strip() or "autenticado")
+    else:
+        value = (False, stderr.strip() or "não autenticado")
+    st.session_state[cache_key] = {"expires_at": time.time() + 60, "value": value}
+    return value
 
 
 def _nlm_cmd(*args, profile: str = "default") -> list | None:
@@ -102,15 +111,24 @@ def _run_cmd(cmd: list | None, timeout: int = 120) -> tuple:
         return "", str(e), 1
 
 
-@st.cache_data(ttl=300)  # cache de 5 minutos
 def list_notebooks(profile: str = "default") -> list:
     """Lista todos os notebooks disponíveis."""
+    cache_key = f"_nlm_notebooks_cache_{profile}"
+    cached = st.session_state.get(cache_key)
+    if isinstance(cached, dict) and cached.get("expires_at", 0) > time.time():
+        return list(cached["value"])
+
     cmd = _nlm_cmd("list", "--json", profile=profile)
     stdout, stderr, code = _run_cmd(cmd)
     if code == 0:
         try:
             data = json.loads(stdout)
-            return data.get("notebooks", [])
+            notebooks = data.get("notebooks", [])
+            st.session_state[cache_key] = {
+                "expires_at": time.time() + 300,
+                "value": notebooks,
+            }
+            return notebooks
         except json.JSONDecodeError:
             pass
     return []
@@ -401,6 +419,7 @@ def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str
         "      \"titulo\": \"... (máx 60 caracteres)\","
         "      \"curso\": \"Um dos 4 cursos oficiais (Português / Matemática / Robótica / Programação)\","
         "      \"eixo\": \"Didático/Comportamental/Diagnóstico\","
+        "      \"tipo_hook\": \"pergunta provocativa / dado surpreendente / depoimento breve / desafio / curiosidade estatística / promessa de resultado rápido\","
         "      \"tema\": \"... (frase completa, específico)\","
         "      \"publico_alvo\": \"Pais de classes A/B do Tatuapé\","
         "      \"cta\": \"PALAVRA_CHAVE\","
@@ -519,4 +538,3 @@ def get_competitor_analysis_streaming(
     return ask_notebook_streaming(
         notebook_id, _build_competitor_prompt(), profile, callback
     )
-

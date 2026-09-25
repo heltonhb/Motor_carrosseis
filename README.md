@@ -59,11 +59,28 @@ cp .env.example .env
 # Edite .env e preencha GEMINI_API_KEY=sua_chave_aqui
 ```
 
-Depois exporte antes de rodar:
+O app carrega automaticamente o arquivo `.env` ao iniciar.
 
-```bash
-export $(grep -v '^#' .env | xargs)
+Para uma instalação compartilhada, defina `AUTH_REQUIRED=true` e configure um
+provedor OIDC na seção `[auth]` de `.streamlit/secrets.toml`. O Streamlit usa
+`st.login`, `st.user` e `st.logout`; o arquivo de secrets nunca deve ser
+versionado.
+
+Exemplo mínimo para desenvolvimento local com Google:
+
+```toml
+[auth]
+redirect_uri = "http://localhost:8501/oauth2callback"
+cookie_secret = "gere-um-segredo-longo-e-aleatorio"
+client_id = "seu-client-id"
+client_secret = "seu-client-secret"
+server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
 ```
+
+O armazenamento local usa JSON por padrão. Para ativar a migração gradual para
+SQLite, defina `STORAGE_BACKEND=sqlite` no `.env`. O banco será criado em
+`data/motor_carrosseis.sqlite3` e cada coleção existente será importada na
+primeira leitura.
 
 **Opção B — Streamlit Cloud / produção:**
 
@@ -99,14 +116,14 @@ O app abre em **http://localhost:8501**
 
 ## Fluxo de trabalho
 
-O app guia o usuário por um pipeline de 6 etapas, indicadas na barra de
+O app guia o usuário por um pipeline principal, indicado na barra de
 progresso no topo:
 
 ```
 📈 Tendências → 💡 Ideias → ✅ Seleção → 🎨 Prompts → 📝 Legendas → 📅 Cronograma
 ```
 
-1. **Tendências** — Gemini pesquisa o que está funcionando no Instagram educacional
+1. **Tendências** — Gemini organiza o que está funcionando no Instagram educacional
    para o público do Tatuapé. Resultado salvo em `data/historico_geracoes.json`.
 2. **Ideias** — Gera 6 ideias estratégicas nos eixos Didático / Comportamental /
    Diagnóstico, com roteiro slide a slide.
@@ -122,6 +139,10 @@ progresso no topo:
    primeiras 4h, registro de métricas e histórico persistido em disco.
 8. **Lote** — Processa todas as ideias selecionadas de uma vez (prompts +
    slides + cronograma) e exporta ZIP.
+9. **NotebookLM** — Consulta fontes do notebook, executa o pipeline completo e
+   envia contexto para as demais etapas.
+10. **Vídeo e histórico** — Monta requisições de vídeo, restaura gerações e
+    permite exportar/importar um backup dos dados locais.
 
 ---
 
@@ -140,11 +161,10 @@ progresso no topo:
 
 | Prioridade | Modelo               |
 |------------|----------------------|
-| 1          | gemini-2.5-flash     |
-| 2          | gemini-2.0-flash     |
-| 3          | gemini-2.0-flash-lite|
-| 4          | gemini-1.5-flash     |
-| 5          | gemini-1.5-flash-8b  |
+| 1          | gemini-3.5-flash     |
+| 2          | gemini-3.5-flash-lite|
+| 3          | gemini-3.1-flash-lite|
+| 4          | gemini-flash-latest  |
 
 Em caso de rate limit (429) ou erro de servidor (5xx), o app faz retry
 automático com backoff exponencial antes de tentar o próximo modelo.
@@ -171,8 +191,7 @@ Respostas idênticas são cacheadas na sessão para evitar cobranças duplas.
 | Pacote           | Uso                                    |
 |------------------|----------------------------------------|
 | streamlit        | Interface web                          |
-| google-genai     | SDK Gemini (opcional, usamos REST API) |
-| requests         | Chamadas REST à API Gemini             |
+| google-genai     | SDK Gemini                             |
 | pillow           | Geração e composição de imagens        |
 | pandas           | Tabela de histórico de métricas        |
 

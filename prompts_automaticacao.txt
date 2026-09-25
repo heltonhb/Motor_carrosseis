@@ -1,15 +1,55 @@
-Modern and clean educational graphic layout on an ultra-soft off-white background (#F7F9FF) with floating pure white cards (#FFFFFF) featuring 20px rounded corners and subtle diffuse drop shadows. Clean geometric sans-serif typography in brand blue (#007799) with a warm yellow marker underline (#FFC20E) highlighting the key phrase. Features a minimalist line-art vector representing family study dynamics (no copyrighted characters). In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'A hora da lição virou um campo de batalha na sua casa?'
+CARROSSEL — PROMPTS PARA O GOOGLE FLOW
 
-High-impact visual slide with a deep brand blue background (#007799). Minimalist modern layout with clean, high-contrast white and warm yellow (#FFC20E) typography. An organic curved transition line adds soft structure. In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'Tentar ser pai e professor ao mesmo tempo desgasta sua relação.'
+## BASE PROMPT (envie junto com o prompt de cada lâmina)
+Shared style base for all 8 slides: soft off-white #F7F9FF background, modern geometric sans-serif typography, Brand Blue #007799 headers, Action Green #58B947 pill buttons for CTAs, yellow #FFC20E marker highlights, floating white cards with 16-24px rounded corners, subtle diffuse shadows, minimalist line icons in colored circles, organic curve transitions. No text overlay, no slide-specific elements.
 
-Soft grayish-blue background (#EEF4FF) with a floating white card container (16px border-radius, soft diffuse shadow). Modern friendly step-by-step layout with a minimalist clock icon inside a circular soft light-blue badge (#E0F2FE). Colors: brand blue (#007799), warm yellow (#FFC20E), and dark navy text (#1E293B). In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'Dica 1: Dê 30 minutos de descanso antes de começar as tarefas.'
+## COMO GERAR A SÉRIE
+Como gerar as 8 lâminas no Google Flow:
+1. Gere primeiro o SLIDE 1: cole o prompt dele e anexe as fotos de referência indicadas.
+2. Nos slides 2 a 8, anexe também a imagem gerada do slide 1 junto com as referências daquela lâmina — é ela que mantém estilo, tipografia e paleta coesos no carrossel.
+3. Use só as fotos do catálogo (refs/) como referência — nada de banco de imagens.
+4. Confira o canto inferior direito: a tag "Mova para o próximo ➔" aparece nos slides 1 a 7 e fica fora do slide 8.
+5. O app não gera imagem: baixe cada lâmina em 1080x1350 px (4:5) e monte o carrossel na ordem 1→8.
 
-Clean off-white background (#F7F9FF) with a floating card in pure white. Minimalist graphic illustration of an organized, well-lit study desk with a lamp and an open notebook, completely free of screens. Subtle pastel card highlight in soft orange (#FFEDD5). Modern geometric sans-serif typography in dark navy (#1E293B). In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'Dica 2: Prepare um cantinho de estudos limpo e sem distrações.'
+## SLIDE 1
+Referências: recepcao_unidade — Recepção / entrada da unidade [refs/Foto (121).jpg]
+Authentic school photo of the welcoming reception and entrance area of the Ensina Mais Tatuapé school, with families and staff, 1080x1350 px vertical 4:5 format, centered elements respecting a 1:1 square safe zone (1080x1080 px) for Instagram grid preview. Bold Brand Blue #007799 text overlay with vibrant yellow #FFC20E marker highlight, modern geometric sans-serif typography. Official 'Ensina Mais Turma da Mônica' logo badge at the bottom corner. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'A hora da lição virou batalha na casa?'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): A hora da lição virou batalha na casa?
 
-Clean background with two rounded speech bubble cards (20px border radius, subtle elevation). One bubble in soft gray represents a stressful question, and the other in action green (#58B947) with a circular icon badge represents positive encouragement. Clean typography with curved marker underline in yellow (#FFC20E). In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'Dica 3: Pergunte: \'Qual é o desafio mais legal de hoje?\''
+## SLIDE 2
+Referências: logo — Logo oficial Ensina Mais Turma da Mônica [refs/LOGO ENSINA TM ASS PRETA.png]
+High-impact visual slide with a deep brand blue background (#007799). Minimalist modern layout with clean, high-contrast white and warm yellow (#FFC20E) typography. An organic curved transition line adds soft structure. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'Tentar ser pai e professor ao mesmo tempo desgasta sua relação.'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): Tentar ser pai e professor ao mesmo tempo desgasta sua relação.
 
-Elegant grid layout with 16px rounded photo frames and soft box-shadows. Inside the grid, authentic school photos are featured: on the left, a young female student happily assembling a robotics kit on a yellow table; on the right, a young male student focused on programming on a laptop. Text in dark navy (#1E293B) explains the individualized methodology. In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'Deixe a mediação pedagógica e a autonomia com nossos especialistas.'
+## SLIDE 3
+Referências: logo — Logo oficial Ensina Mais Turma da Mônica [refs/LOGO ENSINA TM ASS PRETA.png]
+Soft grayish-blue background (#EEF4FF) with a floating white card container (16px border-radius, soft diffuse shadow). Modern friendly step-by-step layout with a minimalist clock icon inside a circular soft light-blue badge (#E0F2FE). Colors: brand blue (#007799), warm yellow (#FFC20E), and dark navy text (#1E293B). No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'Dica 1: Dê 30 minutos de descanso antes de começar as tarefas.'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): Dica 1: Dê 30 minutos de descanso antes de começar as tarefas.
 
-Realistic and faithful photo of the school facade located on Rua Coelho Lisboa, 783. Accurately preserves the white gate, the brand panel, and decorative balloons. Overlaid is a floating white testimonial card with 20px rounded corners, soft shadow, and elegant brand blue (#007799) typography. In the bottom right corner, a small discreet text says 'Arraste para o lado ➔' in Brazilian Portuguese. Text overlay in Brazilian Portuguese: 'De volta à harmonia familiar graças ao apoio da Ensina Mais!'
+## SLIDE 4
+Referências: alunos_apoio — Alunos em aula de apoio / reforço [refs/Foto (160).jpg]
+Authentic school photo of students working on worksheets and school materials with a teacher at Ensina Mais Tatuapé, bright classroom, 1080x1350 px vertical 4:5 format, centered elements respecting a 1:1 square safe zone (1080x1080 px) for Instagram grid preview. Bold Brand Blue #007799 text overlay with vibrant yellow #FFC20E marker highlight, modern geometric sans-serif typography. Official 'Ensina Mais Turma da Mônica' logo badge at the bottom corner. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'Monte um cantinho de estudos sem distrações'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): Monte um cantinho de estudos sem distrações
 
-High-conversion final slide on a soft surface (#F7F9FF). Features the official Ensina Mais logo at the top with a subtle white halo. In the center, a prominent pill-shaped call-to-action button in vibrant Action Green (#58B947) with white text. Minimalist circular outline icons for 'Salvar' and 'Compartilhar'. Text overlay in Brazilian Portuguese: 'Comente HARMONIA ou agende no WhatsApp (11) 94475-0009'
+## SLIDE 5
+Referências: alunos_apoio — Alunos em aula de apoio / reforço [refs/Foto (160).jpg]
+Authentic school photo of students working on worksheets and school materials with a teacher at Ensina Mais Tatuapé, bright classroom, 1080x1350 px vertical 4:5 format, centered elements respecting a 1:1 square safe zone (1080x1080 px) for Instagram grid preview. Bold Brand Blue #007799 text overlay with vibrant yellow #FFC20E marker highlight, modern geometric sans-serif typography. Official 'Ensina Mais Turma da Mônica' logo badge at the bottom corner. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'Qual foi o desafio mais legal de hoje?'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): Qual foi o desafio mais legal de hoje?
+
+## SLIDE 6
+Referências: alunos_robotica — Alunos na sala de robótica [refs/IMG_20250311_135917.jpg]
+Elegant grid layout with 16px rounded photo frames and soft box-shadows. Inside the grid, authentic school photos are featured: on the left, a young female student happily assembling a robotics kit on a yellow table; on the right, a young male student focused on programming on a laptop. Text in dark navy (#1E293B) explains the individualized methodology. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'Deixe a mediação pedagógica e a autonomia com nossos especialistas.'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): Deixe a mediação pedagógica e a autonomia com nossos especialistas.
+
+## SLIDE 7
+Referências: fachada — Fachada da escola [refs/Fachada.png]
+Realistic and faithful photo of the school facade located on Rua Coelho Lisboa, 783. Accurately preserves the white gate, the brand panel, and decorative balloons. Overlaid is a floating white testimonial card with 20px rounded corners, soft shadow, and elegant brand blue (#007799) typography. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'De volta à harmonia familiar graças ao apoio da Ensina Mais!'. In the bottom right corner, a small discreet text in Brazilian Portuguese says 'Mova para o próximo ➔'.
+Text overlay (PT-BR): De volta à harmonia familiar graças ao apoio da Ensina Mais!
+
+## SLIDE 8
+Referências: logo — Logo oficial Ensina Mais Turma da Mônica [refs/LOGO ENSINA TM ASS PRETA.png]
+High-conversion final slide on a soft surface (#F7F9FF). Features the official Ensina Mais logo at the top with a subtle white halo. In the center, a prominent pill-shaped call-to-action button in vibrant Action Green (#58B947) with white text. Minimalist circular outline icons for 'Salvar' and 'Compartilhar'. No cartoon characters, generic minimalist line-art icons only. text overlay in Brazilian Portuguese: 'Comente HARMONIA ou agende no WhatsApp (11) 94475-0009'.
+Text overlay (PT-BR): Comente HARMONIA ou agende no WhatsApp (11) 94475-0009
+
+## DICAS DESTE CARROSSEL
+Carrossel de rotina de estudos em casa: capa com provocação, 3 dicas práticas, mediação pedagógica e prova social pela fachada real da unidade.

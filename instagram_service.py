@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlencode
 
 
 def fetch_post_metrics(
@@ -46,19 +47,24 @@ def fetch_post_metrics(
         "Content-Type": "application/json",
     }
 
-    def make_request(url: str) -> dict[str, Any]:
+    def make_request(url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Faz requisição HTTP GET e retorna JSON."""
+        if not url.startswith("http"):
+            url = f"{base_url}/{url.lstrip('/')}"
+        if params:
+            url = f"{url}?{urlencode(params)}"
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             return {"error": f"HTTP {e.code}: {e.read().decode('utf-8')}"}
+        except urllib.error.URLError as e:
+            return {"error": f"Rede indisponível: {e.reason}"}
 
     def get_ig_account_id_from_page(page_id: str, access_token: str) -> str | None:
         """Obtém o ID da conta Instagram vinculada à página."""
-        url = f"{base_url}/{page_id}/instagram_business_account?access_token={access_token}"
-        data = make_request(url)
+        data = make_request(f"{page_id}/instagram_business_account")
         if "error" in data:
             return None
         ig_account = data.get("instagram_business_account", {})
@@ -68,11 +74,17 @@ def fetch_post_metrics(
 
     def get_ig_media_ids(ig_account_id: str) -> list[str]:
         """Obtém todos os IDs de mídia da conta do Instagram."""
-        url = f"{base_url}/{ig_account_id}/media?fields=id&access_token={access_token}"
-        data = make_request(url)
-        if "error" in data:
-            return []
-        return [item["id"] for item in data.get("data", [])]
+        data = make_request(f"{ig_account_id}/media", {"fields": "id", "limit": 100})
+        media_ids: list[str] = []
+        while data and "error" not in data:
+            media_ids.extend(
+                item["id"] for item in data.get("data", []) if item.get("id")
+            )
+            next_url = data.get("paging", {}).get("next")
+            if not next_url:
+                break
+            data = make_request(next_url)
+        return media_ids
 
     # Obter IG Account ID a partir da Page ID
     ig_account_id = get_ig_account_id_from_page(page_id, access_token)
@@ -85,14 +97,18 @@ def fetch_post_metrics(
     metrics: list[dict[str, Any]] = []
 
     for media_id in post_ids:
-        media_url = f"{base_url}/{media_id}?fields=caption,timestamp,media_type&access_token={access_token}"
-        media_data = make_request(media_url)
+        media_data = make_request(
+            media_id,
+            {"fields": "caption,timestamp,media_type"},
+        )
 
         if "error" in media_data:
             continue
 
-        stats_url = f"{base_url}/{media_id}/insights?metric=impressions,likes,comments,shares,saves&access_token={access_token}"
-        stats_data = make_request(stats_url)
+        stats_data = make_request(
+            f"{media_id}/insights",
+            {"metric": "reach,impressions,likes,comments,shares,saves"},
+        )
 
         if "error" in stats_data or "data" not in stats_data:
             continue
@@ -109,7 +125,12 @@ def fetch_post_metrics(
         except (KeyError, TypeError):
             date_str = datetime.now().strftime("%Y-%m-%d")
 
-        alc = stats.get("impressions", 0)
+        # Alcance e impressões são métricas diferentes. O feedback loop usa
+        # alcance; impressões ficam armazenadas apenas como dado adicional.
+        alc = stats.get("reach", 0)
+        if alc <= 0:
+            continue
+        impressoes = stats.get("impressions", 0)
         salvamentos = stats.get("saves", 0)
         envios = stats.get("shares", 0)
         leads = 0
@@ -118,6 +139,7 @@ def fetch_post_metrics(
             "titulo": title,
             "data": date_str,
             "alcance": alc,
+            "impressoes": impressoes,
             "taxa_salvamentos": round((salvamentos / alc) * 100, 2) if alc > 0 else 0.0,
             "taxa_envios": round((envios / alc) * 100, 2) if alc > 0 else 0.0,
             "taxa_nao_seguidores": 0.0,

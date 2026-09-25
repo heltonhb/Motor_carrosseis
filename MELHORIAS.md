@@ -5,6 +5,82 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
+## ✅ CONCLUÍDO — Bloco 16 (2026-09-24)
+
+**Base para operação compartilhada e crescimento do armazenamento**
+
+- Login OIDC opcional com `st.login`, `st.user` e `st.logout`; o modo local
+  continua aberto quando `AUTH_REQUIRED=false`.
+- Backend SQLite compatível com os mesmos documentos usados pelo JSON atual.
+- Migração gradual: `STORAGE_BACKEND=sqlite` cria o banco e importa as coleções
+  existentes na primeira leitura, sem alterar as funções públicas de persistência.
+- `WAL` e transações SQLite ativados para melhorar a convivência entre sessões.
+- Documentação e `.env.example` atualizados com as configurações de produção.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 17 (2026-09-24)
+
+**Navegação visual dos carrosséis**
+
+- Nova regra nos prompts de imagem: exibir `Mova para o próximo ➔` nos slides
+  1 a 7 e remover a tag do último slide.
+- O campo `tag_navegacao` foi incluído no formato esperado da resposta.
+- A geração local por templates passou a usar a mesma tag, mantendo o padrão
+  entre imagens geradas e imagens renderizadas pelo app.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 18 (2026-09-24)
+
+**Thumbnails com presença real da unidade**
+
+- Slides 1, 4 e 5 passaram a exigir composição de thumbnail com texto curto e
+  foto real anexada pelo usuário, da recepção do Tatuapé ou de alunos em atividade.
+- O prompt proíbe substituir essas fotos por banco de imagens, ilustrações ou
+  alunos genéricos gerados por IA.
+- O formato de saída declara `usa_foto_real` e `tipo_foto` para esses slides.
+- A identidade visual foi alinhada à nova regra de navegação dos carrosséis.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 14 (2026-09-24)
+
+**Melhorias de curto prazo — confiabilidade do fluxo**
+
+- Carregamento real do `.env` com `python-dotenv`; removido código que estava
+  acidentalmente dentro do HTML de estilo.
+- Substituição de `use_container_width` e `components.v1` por APIs atuais do
+  Streamlit.
+- IDs determinísticos adicionados às ideias para preservar o ciclo de vida.
+- Barra de progresso e restauração alinhadas às chaves `prompts_lote` e
+  `legendas_lote` usadas pela interface.
+- Pipeline NotebookLM ampliado para gerar prompts e legendas para todas as
+  ideias produzidas, com aviso por falha individual.
+- Integração do backup ZIP na aba Histórico.
+- Saídas do LLM escapadas nos cards HTML de tendências.
+- Integração do Instagram corrigida para usar alcance, guardar impressões e
+  buscar páginas adicionais de mídias.
+- Script de inicialização corrigido para detectar a instalação do Streamlit.
+
+## ✅ CONCLUÍDO — Bloco 15 (2026-09-24)
+
+**Estado por sessão, caminhos portáveis e ciclo de publicação**
+
+- Arquivos de dados, fontes e templates passaram a usar o diretório do projeto,
+  independentemente do diretório de onde o app é iniciado.
+- Cache de modelos Gemini, autenticação e notebooks do NotebookLM passou a ser
+  por sessão, evitando compartilhar dados de contas diferentes.
+- O cache de respostas Gemini passou a considerar uma impressão digital da
+  chave atual; trocar a chave não reaproveita respostas de outra conta.
+- Ciclo de vida das ideias agora possui ações na interface: aprovar, agendar,
+  registrar publicação e reabrir como agendada.
+- A publicação pode registrar data e legenda realmente usada.
+- O cliente Gemini agora rejeita respostas JSON que não sejam objetos, evitando
+  que arrays ou payloads inválidos quebrem as abas consumidoras.
+
+---
+
 ## ✅ CONCLUÍDO — Bloco 1 (2026-09-17, commit 93d04a0)
 
 **P1 + P2 + M1 — Qualidade do que você publica**

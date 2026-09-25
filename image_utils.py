@@ -20,7 +20,7 @@ from typing import Literal, overload
 
 from PIL import Image, ImageDraw, ImageFont
 
-from config import FONTES, FORMATO
+from config import FONTES, FORMATO, PROJECT_DIR, TAG_NAVEGACAO
 from templates import TEMPLATES, SlideEstrutura
 
 logger = logging.getLogger(__name__)
@@ -288,7 +288,7 @@ def create_slide_from_template(
        (nunca trunca em silêncio — ver return_info)
     4. Renderiza metadados (número/tipo do slide), texto principal,
        CTA e marca no rodapé
-    5. Adiciona "Arraste para o lado ➔" discreto no canto inferior direito
+    5. Adiciona "Mova para o próximo ➔" discreto no canto inferior direito
        (exceto no último slide)
 
     Args:
@@ -300,7 +300,7 @@ def create_slide_from_template(
     template = TEMPLATES.get(template_key, TEMPLATES["desconstrucao_didatica"])
 
     # ── 1. Imagem de base ────────────────────────────────────────────────────
-    template_path = f"templates_base/{template_key}.png"
+    template_path = PROJECT_DIR / "templates_base" / f"{template_key}.png"
     if os.path.exists(template_path):
         img = Image.open(template_path).convert("RGBA")
         if img.size != (w, h):
@@ -372,11 +372,11 @@ def create_slide_from_template(
     draw.text((80, h - 210), cta_text,   font=font_small, fill=cor_destaque)
     draw.text((80, h - 110), marca_text, font=font_small, fill=cor_muted)
 
-    # ── 6. "Arraste para o lado ➔" — canto inferior direito ─────────────────
+    # ── 6. "Mova para o próximo ➔" — canto inferior direito ─────────────────
     # Omitido no slide de CTA (último slide) pois ele não pede deslizamento
     is_last_slide = slide_num >= len(estrutura)
     if not is_last_slide:
-        arraste_text = "Arraste para o lado ➔"
+        arraste_text = TAG_NAVEGACAO
         font_arraste = _load_font(28)
         try:
             arr_bbox = draw.textbbox((0, 0), arraste_text, font=font_arraste)

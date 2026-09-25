@@ -1,8 +1,10 @@
 """
-persistence.py — Persistência de dados em JSON local.
+persistence.py — Persistência local com backend JSON ou SQLite.
 
-Substitui o armazenamento efêmero no st.session_state por arquivos JSON
+Substitui o armazenamento efêmero no st.session_state por dados persistentes
 em disco, garantindo que métricas e histórico sobrevivam a reinicializações.
+JSON continua sendo o padrão local. ``STORAGE_BACKEND=sqlite`` habilita o
+backend SQLite e migra cada coleção JSON na primeira leitura.
 
 Estrutura de arquivos:
     data/metricas.json          — histórico de métricas dos posts
@@ -14,7 +16,8 @@ import os
 from datetime import datetime
 from typing import Any
 
-from config import DATA_DIR, HISTORICO_FILE, IDEIAS_ESTADO_FILE, METRICAS_FILE
+from config import DATA_DIR, HISTORICO_FILE, IDEIAS_ESTADO_FILE, METRICAS_FILE, SQLITE_FILE
+from sqlite_store import read_document, write_document
 
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
@@ -25,8 +28,27 @@ def ensure_data_dir() -> None:
 
 # ─── Operações genéricas ──────────────────────────────────────────────────────
 
+def _use_sqlite() -> bool:
+    """Retorna se o backend SQLite foi habilitado na configuração."""
+    return os.getenv("STORAGE_BACKEND", "json").strip().lower() == "sqlite"
+
+
+def _storage_key(filepath: str) -> str:
+    """Usa o nome legado como chave estável no banco SQLite."""
+    return os.path.basename(filepath)
+
 def _read_json(filepath: str) -> Any:
-    """Lê um arquivo JSON. Retorna None se o arquivo não existir ou for inválido."""
+    """Lê JSON ou documento SQLite, conforme ``STORAGE_BACKEND``."""
+    if _use_sqlite():
+        fallback = None
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, encoding="utf-8") as f:
+                    fallback = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                fallback = None
+        return read_document(SQLITE_FILE, _storage_key(filepath), fallback)
+
     if not os.path.exists(filepath):
         return None
     try:
@@ -42,6 +64,9 @@ def _write_json(filepath: str, data: Any) -> bool:
     escreve em .tmp primeiro, depois renomeia.
     Retorna True em caso de sucesso.
     """
+    if _use_sqlite():
+        return write_document(SQLITE_FILE, _storage_key(filepath), data)
+
     ensure_data_dir()
     tmp_path = filepath + ".tmp"
     try:
@@ -228,14 +253,20 @@ def update_idea_status(
     status: str,
     legenda_texto: str | None = None,
     data_publicacao: str | None = None,
+    titulo: str | None = None,
 ) -> bool:
     """
     Atualiza o status de uma ideia (rascunho → aprovado → agendado → publicado).
     Também pode associar a legenda usada e data de publicação.
     """
+    if status not in {"rascunho", "aprovado", "agendado", "publicado"}:
+        return False
+
     estados = load_ideias_estado()
     if idea_id not in estados:
-        estados[idea_id] = {"id": idea_id, "titulo": ""}
+        estados[idea_id] = {"id": idea_id, "titulo": titulo or ""}
+    elif titulo:
+        estados[idea_id]["titulo"] = titulo
 
     estados[idea_id]["status"] = status
     if legenda_texto is not None:
@@ -305,18 +336,25 @@ def sync_session_from_disk(session_state: dict) -> None:
     if metricas and "historico_metricas" not in session_state:
         session_state["historico_metricas"] = metricas
 
-    # Última geração de cada tipo
-    for tipo in ("tendencias", "ideias", "cronograma", "prompts", "legendas", "video_curto"):
-        key_map = {
-            "tendencias": "tendencias",
-            "ideias": "ideias",
-            "cronograma": "cronograma",
-            "prompts": "prompts",
-            "legendas": "legendas",
-            "video_curto": "video_curto",
-        }
-        session_key = key_map[tipo]
+    # Última geração de cada tipo. Prompts e legendas são listas na UI, para
+    # preservar mais de uma geração na mesma sessão.
+    for tipo, session_key in (
+        ("tendencias", "tendencias"),
+        ("ideias", "ideias"),
+        ("cronograma", "cronograma"),
+        ("video_curto", "video_curto"),
+    ):
         if session_key not in session_state:
             dados = load_ultima_geracao(tipo)
             if dados:
                 session_state[session_key] = dados
+
+    if "prompts_lote" not in session_state:
+        dados = load_ultima_geracao("prompts")
+        if dados:
+            session_state["prompts_lote"] = [dados]
+
+    if "legendas_lote" not in session_state:
+        dados = load_ultima_geracao("legendas")
+        if dados:
+            session_state["legendas_lote"] = [dados]

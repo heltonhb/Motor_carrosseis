@@ -1,29 +1,57 @@
 """Testes do validador de prompts de imagem (validate_prompts)."""
 
+from config import TAG_NAVEGACAO
 from prompts import validate_prompts
+
+_TIPOS_THUMB = {1: "recepcao_unidade", 4: "alunos_robotica", 5: "aluno_programacao"}
+
+
+def _tag_frase(n: int) -> str:
+    if n == 8:
+        return ""
+    return (
+        "In the bottom right corner, a small discreet text in Brazilian "
+        f"Portuguese says '{TAG_NAVEGACAO}'."
+    )
 
 
 def _slide(n: int, overlay: str, prompt_en: str | None = None) -> dict:
     if prompt_en is None:
-        prompt_en = (
-            f"Modern educational slide {n} with floating white cards. "
-            f"Text overlay in Brazilian Portuguese: '{overlay}'"
+        corpo = (
+            f"Authentic school photo of students at Ensina Mais Tatuapé, slide {n}"
+            if n in _TIPOS_THUMB
+            else f"Modern educational slide {n} with cards and line icons"
         )
+        prompt_en = (
+            f"{corpo}. text overlay in Brazilian Portuguese: '{overlay}'. "
+            f"No cartoon characters. {_tag_frase(n)}"
+        ).strip()
+    if n in _TIPOS_THUMB:
+        refs = [_TIPOS_THUMB[n]]
+    elif n == 7:
+        refs = ["fachada"]
+    else:
+        refs = ["logo"]
     return {
         "slide_num": n,
         "prompt_en": prompt_en,
         "prompt_pt": f"Descrição do slide {n}",
         "text_overlay": overlay,
+        "estilo": "Capa" if n == 1 else "Conteúdo",
+        "usa_foto_real": n in _TIPOS_THUMB,
+        "tipo_foto": _TIPOS_THUMB.get(n, "logo"),
+        "referencias": refs,
+        "tag_navegacao": "" if n == 8 else TAG_NAVEGACAO,
     }
 
 
 def _payload_valido() -> dict:
     overlays = [
-        "A hora da lição de casa virou batalha na sua casa?",
+        "A hora da lição de casa virou batalha?",
         "Tentar ser pai e professor ao mesmo tempo desgasta",
         "Dica 1: dê 30 minutos de descanso antes das tarefas",
-        "Dica 2: monte um cantinho de estudos sem distrações",
-        "Dica 3: pergunte qual foi o desafio mais legal de hoje",
+        "Monte um cantinho de estudos sem distrações",
+        "Qual foi o desafio mais legal de hoje?",
         "Deixe a mediação pedagógica com nossos especialistas",
         "De volta à harmonia familiar com o apoio da Ensina Mais",
         "Comente HARMONIA ou chame no WhatsApp (11) 94475-0009",
@@ -114,7 +142,7 @@ def test_arraste_para_o_lado_dentro_do_overlay():
     p = _payload_valido()
     p["slides"][0]["text_overlay"] = "Arraste para o lado ➔ veja as dicas"
     avisos = validate_prompts(p)
-    assert any("camada separada" in a for a in avisos)
+    assert any("tag_navegacao" in a or "regra 6" in a for a in avisos)
 
 
 def test_swipe_english_no_overlay():
@@ -249,7 +277,89 @@ def test_regra_dupla_monica_em_todos_os_prompts():
     assert "regra dupla" in PROMPT_VIDEO_CURTO
 
 
-def test_regras_9_e_10_de_consistencia():
+def test_regras_9_e_10_e_11_de_consistencia():
     from prompts import PROMPT_PROMPTS_IMAGEM
     assert "9. BASE_PROMPT PARA CONSISTÊNCIA" in PROMPT_PROMPTS_IMAGEM
-    assert "10. GERAÇÃO EM SÉRIE" in PROMPT_PROMPTS_IMAGEM
+    assert "10. \"dicas_gerais\" — ESPECÍFICO DESTE CARROSSEL" in PROMPT_PROMPTS_IMAGEM
+    assert "11. REFERÊNCIA DE IMAGEM POR SLIDE" in PROMPT_PROMPTS_IMAGEM
+
+
+# ─── Regra 6 — tag de navegação no prompt_en ────────────────────────────────
+
+def test_tag_ausente_no_prompt_en_avisado():
+    p = _payload_valido()
+    p["slides"][0]["prompt_en"] = p["slides"][0]["prompt_en"].replace(TAG_NAVEGACAO, "…")
+    avisos = validate_prompts(p)
+    assert any("regra 6" in a for a in avisos)
+
+
+def test_tag_no_prompt_do_slide_8_avisado():
+    p = _payload_valido()
+    p["slides"][7]["prompt_en"] += f" discreet tag {TAG_NAVEGACAO} bottom right."
+    p["slides"][7]["tag_navegacao"] = TAG_NAVEGACAO
+    avisos = validate_prompts(p)
+    assert any("slide 8" in a.lower() for a in avisos)
+
+
+def test_tag_campo_json_incoerente():
+    p = _payload_valido()
+    p["slides"][2]["tag_navegacao"] = ""
+    avisos = validate_prompts(p)
+    assert any("tag_navegacao" in a for a in avisos)
+
+
+# ─── Regra 7 — cláusula anti-personagem ─────────────────────────────────────
+
+def test_clausula_no_cartoon_characters_obrigatoria():
+    p = _payload_valido()
+    p["slides"][1]["prompt_en"] = p["slides"][1]["prompt_en"].replace(
+        "No cartoon characters.", ""
+    )
+    avisos = validate_prompts(p)
+    assert any("no cartoon characters" in a for a in avisos)
+
+
+# ─── Regra 11 — referências de imagem por slide ─────────────────────────────
+
+def test_referencia_fora_do_catalogo():
+    p = _payload_valido()
+    p["slides"][0]["referencias"] = ["foto_anexada", "banco_de_imagens"]
+    avisos = validate_prompts(p)
+    assert any("fora do catálogo" in a for a in avisos)
+
+
+def test_referencia_vazia():
+    p = _payload_valido()
+    p["slides"][3]["referencias"] = []
+    avisos = validate_prompts(p)
+    assert any("referencias" in a for a in avisos)
+
+
+def test_slide_thumbnail_sem_cena_fotografica():
+    p = _payload_valido()
+    p["slides"][4]["referencias"] = ["logo"]
+    avisos = validate_prompts(p)
+    assert any("foto real da unidade" in a for a in avisos)
+
+
+def test_prompt_pt_vazio():
+    p = _payload_valido()
+    p["slides"][2]["prompt_pt"] = ""
+    assert any("prompt_pt vazio" in a for a in validate_prompts(p))
+
+
+# ─── Export .txt da série (Google Flow) ─────────────────────────────────────
+
+def test_formatar_txt_prompts_inclui_serie_e_referencias():
+    from prompts import DICAS_SERIE_FLOW, formatar_txt_prompts
+    txt = formatar_txt_prompts(_payload_valido())
+    assert "COMO GERAR A SÉRIE" in txt
+    assert DICAS_SERIE_FLOW in txt
+    assert "## SLIDE 1" in txt and "## SLIDE 8" in txt
+    assert "Referências: recepcao_unidade" in txt
+
+
+def test_formatar_txt_prompts_payload_invalido():
+    from prompts import formatar_txt_prompts
+    assert "## SLIDE" not in formatar_txt_prompts({})
+    assert formatar_txt_prompts(None) == ""  # type: ignore[arg-type]

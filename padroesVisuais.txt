@@ -13,7 +13,7 @@ Fundos e Superfícies: Tons muito suaves de off-white e azul acinzentado (#F7F9F
 2. Tipografia
 Família Tipográfica Principal: Sans-serif geométrica moderna e amigável (estilo Plus Jakarta Sans / Poppins).
 Títulos e Headings: Pesos médios a ultra-bold (Bold/Black), com uso frequente de sublinhados curvos ou marcações com traço amarelado (#FFC20E) destacando palavras-chave ("pressão", "entende", "cada criança").
-Corpo de Texto: Semiserifado limpo em cinza-escuro/azul-marinho (#1E293B), garantindo ótima legibilidade tanto para formulários quanto para descrições de disciplinas. Máximo de 35-45 palavras por tela.
+Corpo de Texto: Semiserifado limpo em cinza-escuro/azul-marinho (#1E293B), garantindo ótima legibilidade tanto para formulários quanto para descrições de disciplinas. Máximo de 35-45 palavras por tela no texto dos slides do roteiro; o texto sobreposto das imagens é mais curto — até 15 palavras, e 3-8 nas thumbnails (slides 1, 4 e 5).
 3. Formas, Bordas e Elevação
 Arredondamento Amigável (Border Radius): Bordas generosamente arredondadas (12px a 24px em cards; pílula/full-round em botões e badges secundárias), eliminando cantos retos pontiagudos para reforçar o clima acolhedor.
 Divisores Orgânicos: Uso de ondas suaves e transições em curva entre seções (especialmente separando o hero banner e as seções de metodologia).
@@ -21,4 +21,4 @@ Sombras e Profundidade: Sombras sutis e difusas (box-shadow suave), conferindo a
 4. Iconografia e Detalhes
 Iconografia Delineada e Clara: Ícones minimalistas com fundos circulares coloridos para representar etapas pedagógicas (Avaliação Inicial, Plano Individualizado, Acompanhamento Contínuo).
 Logo: "Ensina Mais Turma da Mônica" com borda branca discreta no canto superior/inferior — referência fotográfica oficial da marca; os personagens da Turma da Mônica NUNCA são gerados (permitido só o logo e o painel real da fachada).
-Continuidade: "Arraste para o lado ➔" em português, canto inferior direito, fonte menor e discreta — camada separada do text_overlay.
+Continuidade: "Mova para o próximo ➔" em português nos slides intermediários, canto inferior direito, fonte menor e discreta — texto discreto renderizado pelo próprio prompt (nunca dentro do text_overlay); não usar no último slide.

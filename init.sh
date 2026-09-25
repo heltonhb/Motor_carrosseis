@@ -25,7 +25,7 @@ if [ ! -d ".venv" ]; then
 fi
 
 # 3. Instala dependencies (usa venv existente)
-if [ ! -f ".venv/lib/python*/site-packages/streamlit/__init__.py" ]; then
+if [ ! -x ".venv/bin/streamlit" ]; then
     echo -e "${YELLOW}⏳ Instalando dependências...${NC}"
     uv pip install --python .venv/bin/python -e .
 fi
@@ -34,7 +34,7 @@ fi
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}⏳ Configurando .env...${NC}"
     cp .env.example .env
-    echo -e "${YELLOW}⚠️ Edite .env e configure a API_KEY_GEMINI${NC}"
+    echo -e "${YELLOW}⚠️ Edite .env e configure a GEMINI_API_KEY${NC}"
 fi
 
 # 5. Inicia o app

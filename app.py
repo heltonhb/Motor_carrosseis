@@ -5,6 +5,7 @@ ideias estratégicas, prompts para Google Flow, geração de imagens e cronogram
 """
 
 # ─── Imports (todos no topo) ──────────────────────────────────────────────────
+import hashlib
 import html
 import json
 import os
@@ -16,9 +17,10 @@ from io import BytesIO
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
+from dotenv import load_dotenv
 
 import notebooklm_client as nlm
+from backup import apply_backup_zip, build_backup_zip, preview_backup
 from batch_engine import (
     gerar_cronograma,
     gerar_legendas_ideia,
@@ -44,23 +46,30 @@ from parser_nlm import extract_json
 from persistence import (
     importar_metricas,
     limpar_metricas_vazias,
+    load_historico_geracoes,
     load_ideias_estado,
     load_metricas,
     save_geracao,
     save_metrica,
     sync_session_from_disk,
+    update_idea_status,
 )
 from prompts import (
+    DICAS_SERIE_FLOW,
     PROMPT_TENDENCIAS,
     PROMPT_VIDEO_CURTO,
     TEMPERATURAS,
     cor_eh_valida,
+    formatar_txt_prompts,
     get_prompt_cronograma,
     get_prompt_ideias,
     validate_idea_diversity,
     validate_prompts,
 )
+from refs_catalog import arquivo_principal, rotulos_referencias
 from templates import TEMPLATES, MetricaPost, eixo_para_template
+
+load_dotenv()
 
 # ─── Configuração da página ───────────────────────────────────────────────────
 st.set_page_config(
@@ -70,17 +79,87 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
+def _auth_required() -> bool:
+    """Lê a chave de ativação do login OIDC sem quebrar o modo local."""
+    try:
+        configured = st.secrets.get("AUTH_REQUIRED")
+    except Exception:
+        configured = None
+    if configured is None:
+        configured = os.getenv("AUTH_REQUIRED", "false")
+    return str(configured).strip().lower() in {"1", "true", "yes", "on"}
+
+
+if _auth_required():
+    if not st.user.is_logged_in:
+        st.title("Acesso restrito")
+        st.caption("Faça login para acessar o Motor de Carrosséis.")
+        st.login()
+        st.stop()
+
+    with st.sidebar:
+        usuario = getattr(st.user, "name", None) or getattr(st.user, "email", None)
+        if usuario:
+            st.caption(f"Usuário: {usuario}")
+        if st.button("Sair", key="_logout_button"):
+            st.logout()
+
 # ─── Startup: sincronizar disco → session_state (uma vez por sessão) ──────────
 if "_synced" not in st.session_state:
     sync_session_from_disk(st.session_state)
     st.session_state["_synced"] = True
 
+
+def _ensure_idea_ids(ideias: list[dict], origem: str = "") -> list[dict]:
+    """Garante IDs estáveis para ideias vindas do LLM ou do NotebookLM."""
+    for idx, ideia in enumerate(ideias):
+        if ideia.get("id"):
+            continue
+        identidade = json.dumps(
+            {
+                "titulo": ideia.get("titulo", ""),
+                "tema": ideia.get("tema", ""),
+                "eixo": ideia.get("eixo", ""),
+                "slides": ideia.get("slides_sugeridos", []),
+                "origem": origem,
+                "indice": idx,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        digest = hashlib.sha256(identidade.encode("utf-8")).hexdigest()[:16]
+        ideia["id"] = f"ideia_{digest}"
+    return ideias
+
+
+def _normalizar_tendencias(data) -> dict:
+    """Converte respostas antigas em lista para o schema da aba de tendências."""
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, list):
+        if len(data) == 1 and isinstance(data[0], dict):
+            secoes = {
+                "tendencias_conteudo",
+                "engagement_forensics",
+                "dores_pais",
+                "sazonalidade",
+                "tendencias_comportamento",
+                "oportunidades_concorrencia",
+            }
+            if secoes.intersection(data[0]):
+                return data[0]
+        itens = [item for item in data if isinstance(item, dict)]
+        if itens:
+            return {"tendencias_conteudo": itens}
+    return {}
+
+
+if isinstance(st.session_state.get("ideias"), dict):
+    _ensure_idea_ids(st.session_state["ideias"].get("ideias", []), "restaurada")
+
 # ─── CSS customizado ──────────────────────────────────────────────────────────
 st.markdown(f"""
-
-import os
-from dotenv import load_dotenv
-load_dotenv()
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -533,8 +612,8 @@ def clipboard_button(text: str, label: str, key: str) -> None:
     Fallback: se a API falhar (ex.: HTTP não seguro), exibe o texto
     para copiar manualmente, como no comportamento antigo.
     """
-    if st.button(label, key=key, use_container_width=True):
-        components.html(
+    if st.button(label, key=key, width="stretch"):
+        st.html(
             f"""
             <script>
             (function() {{
@@ -564,7 +643,7 @@ def clipboard_button(text: str, label: str, key: str) -> None:
             }})();
             </script>
             """,
-            height=0,
+            unsafe_allow_javascript=True,
         )
         st.success("✅ Copiado para a área de transferência!")
         st.code(text, language=None)
@@ -579,8 +658,8 @@ def flow_progress() -> None:
         ("tendencias",          "📈 Tendências"),
         ("ideias",              "💡 Ideias"),
         ("ideias_selecionadas", "✅ Seleção"),
-        ("prompts",             "🎨 Prompts"),
-        ("legendas",            "📝 Legendas"),
+        ("prompts_lote",        "🎨 Prompts"),
+        ("legendas_lote",       "📝 Legendas"),
         ("cronograma",          "📅 Cronograma"),
     ]
     html_parts = []
@@ -699,6 +778,99 @@ def render_idea_card(idea: dict, idx: int) -> None:
         {score_html}
     </div>
     """, unsafe_allow_html=True)
+
+
+    # ── Ciclo de vida da ideia ──────────────────────────────────────────────
+    with st.container(border=True):
+        st.caption("Ciclo de vida da publicação")
+        if status == "rascunho":
+            if st.button(
+                "✅ Aprovar ideia",
+                key=f"status_aprovar_{idea_id}",
+                width="stretch",
+            ):
+                if update_idea_status(idea_id, "aprovado", titulo=idea.get("titulo", "")):
+                    st.rerun()
+        elif status == "aprovado":
+            if st.button(
+                "📅 Marcar como agendada",
+                key=f"status_agendar_{idea_id}",
+                width="stretch",
+            ):
+                if update_idea_status(idea_id, "agendado", titulo=idea.get("titulo", "")):
+                    st.rerun()
+        elif status == "agendado":
+            try:
+                data_default = datetime.fromisoformat(
+                    str(estado.get("data_publicacao", ""))
+                ).date()
+            except ValueError:
+                data_default = datetime.now().date()
+
+            data_publicacao = st.date_input(
+                "Data da publicação",
+                value=data_default,
+                key=f"status_data_{idea_id}",
+            )
+
+            legendas_ideia = []
+            for item in st.session_state.get("legendas_lote", []):
+                item_ideia = item.get("ideia", {})
+                if (
+                    item_ideia.get("id") == idea_id
+                    or item.get("titulo") == idea.get("titulo", "")
+                ):
+                    legendas_ideia.extend(item.get("legendas", []))
+
+            legenda_texto = None
+            if legendas_ideia:
+                opcoes_legenda = {
+                    f"Opção {leg.get('opcao', idx + 1)}": leg.get("legenda_completa", "")
+                    for idx, leg in enumerate(legendas_ideia)
+                    if leg.get("legenda_completa")
+                }
+                if opcoes_legenda:
+                    legenda_label = st.selectbox(
+                        "Legenda usada",
+                        list(opcoes_legenda),
+                        key=f"status_legenda_{idea_id}",
+                    )
+                    legenda_texto = opcoes_legenda[legenda_label]
+
+            with st.container(horizontal=True):
+                if st.button(
+                    "🚀 Registrar publicação",
+                    key=f"status_publicar_{idea_id}",
+                    type="primary",
+                    width="stretch",
+                ):
+                    if update_idea_status(
+                        idea_id,
+                        "publicado",
+                        legenda_texto=legenda_texto,
+                        data_publicacao=str(data_publicacao),
+                        titulo=idea.get("titulo", ""),
+                    ):
+                        st.rerun()
+                if st.button(
+                    "↩️ Reverter",
+                    key=f"status_reverter_agendado_{idea_id}",
+                    width="stretch",
+                ):
+                    if update_idea_status(idea_id, "aprovado", titulo=idea.get("titulo", "")):
+                        st.rerun()
+        elif status == "publicado":
+            data_publicada = estado.get("data_publicacao") or "data não registrada"
+            st.caption(f"Publicado em {data_publicada}")
+            if estado.get("legenda_texto"):
+                st.caption("Legenda usada registrada no histórico.")
+            if st.button(
+                "↩️ Reabrir como agendada",
+                key=f"status_reverter_publicado_{idea_id}",
+                width="stretch",
+            ):
+                if update_idea_status(idea_id, "agendado", titulo=idea.get("titulo", "")):
+                    st.rerun()
 
 
     slides = idea.get("slides_sugeridos", [])
@@ -830,9 +1002,9 @@ with tab1:
 
     col_btn, col_inv = st.columns([1, 1])
     with col_btn:
-        gerar_tend = st.button("🔍 Analisar Tendências", type="primary", use_container_width=True)
+        gerar_tend = st.button("🔍 Analisar Tendências", type="primary", width="stretch")
     with col_inv:
-        if st.button("🔄 Forçar nova análise", use_container_width=True,
+        if st.button("🔄 Forçar nova análise", width="stretch",
                      help="Ignora o cache e gera uma análise nova"):
             invalidate_cache(PROMPT_TENDENCIAS)
             st.session_state.pop("tendencias", None)
@@ -844,6 +1016,7 @@ with tab1:
         else:
             with st.spinner("🤖 Pesquisando tendências…"):
                 data = call_gemini_json(PROMPT_TENDENCIAS, temperature=TEMPERATURAS["tendencias"])
+                data = _normalizar_tendencias(data)
                 if data:
                     st.session_state["tendencias"] = data
                     st.session_state["tendencias_texto"] = json.dumps(data, ensure_ascii=False)
@@ -851,7 +1024,8 @@ with tab1:
                     st.success("✅ Tendências analisadas e salvas!")
 
     if st.session_state.get("tendencias"):
-        data = st.session_state["tendencias"]
+        data = _normalizar_tendencias(st.session_state["tendencias"])
+        st.session_state["tendencias"] = data
 
         st.markdown("### 🎬 Tendências de Conteúdo no Instagram")
         for t in data.get("tendencias_conteudo", []):
@@ -859,9 +1033,9 @@ with tab1:
             cor = CORES["secundaria"] if pot == "alto" else CORES["destaque"] if pot == "médio" else CORES["texto_sec"]
             st.markdown(f"""
             <div class="metric-box">
-                <strong style="color:{cor};">{t.get('nome','')}</strong>
-                <span style="color:{CORES['texto_sec']}; font-size:0.85em; margin-left:8px;">[{pot}]</span>
-                <br><span style="color:{CORES['texto']}; font-size:0.9em;">{t.get('descricao','')}</span>
+                <strong style="color:{cor};">{_esc(t.get('nome',''))}</strong>
+                <span style="color:{CORES['texto_sec']}; font-size:0.85em; margin-left:8px;">[{_esc(pot)}]</span>
+                <br><span style="color:{CORES['texto']}; font-size:0.9em;">{_esc(t.get('descricao',''))}</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -879,8 +1053,8 @@ with tab1:
         for t in data.get("tendencias_comportamento", []):
             st.markdown(f"""
             <div class="metric-box">
-                <strong style="color:{CORES['primaria']};">{t.get('tendencia','')}</strong>
-                <br><span style="color:{CORES['texto']}; font-size:0.9em;">{t.get('aplicacao','')}</span>
+                <strong style="color:{CORES['primaria']};">{_esc(t.get('tendencia',''))}</strong>
+                <br><span style="color:{CORES['texto']}; font-size:0.9em;">{_esc(t.get('aplicacao',''))}</span>
             </div>
             """, unsafe_allow_html=True)
 
@@ -904,7 +1078,7 @@ with tab2:
     for i, (tkey, tval) in enumerate(TEMPLATES.items()):
         with tcols[i]:
             if st.button(
-                f"{tval['icone']} {tval['nome']}", key=f"tpl_{tkey}", use_container_width=True
+                f"{tval['icone']} {tval['nome']}", key=f"tpl_{tkey}", width="stretch"
             ):
                 st.session_state["template_selecionado"] = tkey
                 st.session_state["template_info"] = tval
@@ -918,7 +1092,7 @@ with tab2:
         with c2:
             custom_cta = st.text_input("Palavra-chave CTA:", value=tpl["cta_padrao"], key="custom_cta")
 
-        if st.button("🎲 Gerar com Template", type="primary", use_container_width=True):
+        if st.button("🎲 Gerar com Template", type="primary", width="stretch"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
@@ -926,6 +1100,7 @@ with tab2:
                 with st.spinner("🤖 Gerando ideias com template…"):
                     dados = call_gemini_json(get_prompt_ideias(), ctx, temperature=TEMPERATURAS["ideias"])
                     if dados:
+                        _ensure_idea_ids(dados.get("ideias", []), "template")
                         st.session_state["ideias"] = dados
                         save_geracao("ideias", dados)
                         st.success("✅ Ideias geradas com alto engajamento!")
@@ -937,7 +1112,7 @@ with tab2:
         st.markdown("### 📋 Usar Ideias do NotebookLM")
         st.info("💡 Você tem ideias prontas do NotebookLM. Use-as diretamente sem precisar gerar novas ideias.")
 
-        if st.button("📤 Usar Ideias do NotebookLM", type="primary", use_container_width=True):
+        if st.button("📤 Usar Ideias do NotebookLM", type="primary", width="stretch"):
             # Converter o resultado do NotebookLM para formato de ideias
             nb_result = st.session_state["nb_result"]
 
@@ -1063,6 +1238,8 @@ with tab2:
                     if not ideia.get(campo):
                         ideia[campo] = default
 
+            _ensure_idea_ids(ideias_formatadas, "notebooklm")
+
             if ideias_formatadas:
                 st.session_state["ideias"] = {"ideias": ideias_formatadas}
                 st.session_state["ideias_selecionadas"] = ideias_formatadas
@@ -1102,9 +1279,9 @@ with tab2:
     with c2:
         col_gerar, col_nova = st.columns(2)
         with col_gerar:
-            gerar_ideias_btn = st.button("🎲 Gerar Ideias", type="primary", use_container_width=True)
+            gerar_ideias_btn = st.button("🎲 Gerar Ideias", type="primary", width="stretch")
         with col_nova:
-            if st.button("🔄 Forçar novas", use_container_width=True,
+            if st.button("🔄 Forçar novas", width="stretch",
                          help="Ignora o cache e gera ideias novas"):
                 invalidate_cache(get_prompt_ideias())
                 st.session_state.pop("ideias", None)
@@ -1126,6 +1303,7 @@ with tab2:
             with st.spinner("🤖 Gerando 6 ideias estratégicas de alta retenção…"):
                 dados = call_gemini_json(get_prompt_ideias(), f"Tendências:\n{ctx}", temperature=TEMPERATURAS["ideias"])
                 if dados:
+                    _ensure_idea_ids(dados.get("ideias", []), "gemini")
                     st.session_state["ideias"] = dados
                     save_geracao("ideias", dados)
                     st.success("✅ 6 ideias geradas com alta retenção e diversidade de ganchos!")
@@ -1190,23 +1368,33 @@ with tab3:
         opcoes_p = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
         escolha = st.selectbox("Ideia para gerar prompts:", list(opcoes_p.keys()), key="sel_prompt")
 
-        if st.button("🎨 Gerar Prompts", type="primary", use_container_width=True):
+        if st.button("🎨 Gerar Prompts", type="primary", width="stretch"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
                 ideia = opcoes_p[escolha]
                 # Guarda com índice para não sobrescrever prompts de outras ideias (P3)
                 with st.spinner("🤖 Gerando prompts de imagem…"):
-                    dados = gerar_prompts_ideia(ideia, forcar=True)
+                    avisos_gen: list = []
+                    corrigidos_gen: list = []
+                    dados = gerar_prompts_ideia(
+                        ideia, forcar=True, avisos=avisos_gen, corrigidos=corrigidos_gen
+                    )
                     if dados:
                         titulo = ideia.get("titulo", "Ideia")
-                        st.session_state.setdefault("prompts_lote", []).append(
-                            {"titulo": titulo, "prompts": dados, "ideia": ideia}
-                        )
-                        save_geracao("prompts", {"titulo": titulo, "prompts": dados})
-                        avisos_novos = validate_prompts(dados, ideia)
-                        if avisos_novos:
-                            st.warning(f"⚠️ {len(avisos_novos)} aviso(s) na validação dos prompts gerados.")
+                        item_gen = {
+                            "titulo": titulo,
+                            "prompts": dados,
+                            "ideia": ideia,
+                            "avisos": avisos_gen,
+                            "corrigidos": corrigidos_gen,
+                        }
+                        st.session_state.setdefault("prompts_lote", []).append(item_gen)
+                        save_geracao("prompts", item_gen)
+                        for c in corrigidos_gen:
+                            st.success(f"🛠️ {c}")
+                        if avisos_gen:
+                            st.warning(f"⚠️ {len(avisos_gen)} aviso(s) na validação dos prompts gerados.")
                         else:
                             st.success("✅ Prompts gerados e validados!")
 
@@ -1232,8 +1420,13 @@ with tab3:
             if not isinstance(prompts, dict):
                 prompts = {}
 
-            # Validação na exibição (cobre gerações restauradas do histórico)
-            avisos_p = validate_prompts(prompts, item_p.get("ideia"))
+            # Validação na exibição (cobre gerações restauradas do histórico;
+            # gerações novas já trazem os avisos finais salvos no item)
+            avisos_p = item_p.get("avisos")
+            if avisos_p is None:
+                avisos_p = validate_prompts(prompts, item_p.get("ideia"))
+            for c in item_p.get("corrigidos") or []:
+                st.success(f"🛠️ {c}")
             if avisos_p:
                 with st.expander(f"⚠️ Avisos de validação ({len(avisos_p)})", expanded=True):
                     for a in avisos_p:
@@ -1275,14 +1468,7 @@ with tab3:
 
             # Prompts por slide
             st.markdown("### 📸 Prompts por Slide")
-            ref_labels = {
-                "logo":             "🏷️ Logo Ensina Mais Turma da Mônica",
-                "fachada":          "🏢 Foto da Fachada (Rua Coelho Lisboa, 783)",
-                "alunos_robótica":  "🤖 Foto: Aluna montando robô",
-                "alunos_programação": "💻 Foto: Aluno programando",
-                "alunos_apoio":     "📚 Foto: Alunos em aula de reforço",
-                "lab_tecnologia":   "🔬 Foto: Laboratório de Tecnologia",
-            }
+            ref_labels = rotulos_referencias()
 
             for slide in prompts.get("slides", []):
                 snum = slide.get("slide_num", "?")
@@ -1303,12 +1489,17 @@ with tab3:
 
                     refs = slide.get("referencias", [])
                     if refs:
-                        refs_text = " | ".join(ref_labels.get(r, r) for r in refs)
-                        st.markdown(f"**📎 Referências:** {refs_text}")
+                        partes = []
+                        for r in refs:
+                            rot = ref_labels.get(r, r)
+                            arq = arquivo_principal(r)
+                            partes.append(f"{rot} (`{arq}`)" if arq else rot)
+                        st.markdown(f"**📎 Referências para anexar no Flow:** {' | '.join(partes)}")
 
             # Dicas gerais
+            st.markdown("### 💡 Como gerar a série no Google Flow")
+            st.info(DICAS_SERIE_FLOW)
             if prompts.get("dicas_gerais"):
-                st.markdown("### 💡 Dicas Gerais")
                 st.info(prompts["dicas_gerais"])
 
             # Exportações
@@ -1320,20 +1511,16 @@ with tab3:
                     data=json.dumps(prompts, ensure_ascii=False, indent=2),
                     file_name="prompts_carrossel.json",
                     mime="application/json",
-                    use_container_width=True,
+                    width="stretch",
                 )
             with c2:
-                txt_content = "\n\n".join(
-                    s.get("prompt_en", "")
-                    for s in prompts.get("slides", [])
-                    if s.get("prompt_en")
-                )
+                txt_content = formatar_txt_prompts(prompts)
                 st.download_button(
                     "⬇️ Exportar .txt (automação)",
                     data=txt_content,
                     file_name="prompts_automaticacao.txt",
                     mime="text/plain",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
@@ -1348,7 +1535,7 @@ with tab4:
     uploaded = st.file_uploader("Imagem (JPG, PNG)", type=["jpg", "jpeg", "png"], key="upload_img")
     if uploaded:
         img_bytes = uploaded.read()
-        st.image(img_bytes, caption="Original", use_container_width=True)
+        st.image(img_bytes, caption="Original", width="stretch")
         c1, c2, c3 = st.columns(3)
         with c1:
             overlay_text = st.text_input("Texto sobreposto (PT-BR, ≤15 palavras):")
@@ -1357,7 +1544,7 @@ with tab4:
         with c3:
             pos = st.selectbox("Posição:", ["center", "bottom", "top"])
 
-        if st.button("🖼️ Adicionar Texto", type="primary", use_container_width=True):
+        if st.button("🖼️ Adicionar Texto", type="primary", width="stretch"):
             if overlay_text:
                 with st.spinner("Processando…"):
                     result_bytes = add_text_overlay(img_bytes, overlay_text, font_size=font_sz, position=pos)
@@ -1385,7 +1572,7 @@ with tab4:
     default_text = estrutura[min(slide_num - 1, len(estrutura) - 1)].texto
     slide_text = st.text_area("Texto do slide:", value=default_text)
 
-    if st.button("🖼️ Gerar Slide", type="primary", use_container_width=True):
+    if st.button("🖼️ Gerar Slide", type="primary", width="stretch"):
         with st.spinner("Gerando slide…"):
             sb, info = create_slide_from_template(tpl_key, int(slide_num), slide_text or "", return_info=True)
             st.image(sb, caption=f"Slide {slide_num} — {tpl_data['nome']}")
@@ -1425,7 +1612,7 @@ with tab4:
                         height=110,
                     )
 
-        if st.button("🎠 Gerar Todos os Slides", type="primary", use_container_width=True):
+        if st.button("🎠 Gerar Todos os Slides", type="primary", width="stretch"):
             # Textos editados (fallback: texto original da ideia)
             textos_edit = []
             for i, slide in enumerate(slides_list):
@@ -1481,7 +1668,7 @@ with tab5:
         opts_l = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
         escolha_l = st.selectbox("Carrossel:", list(opts_l.keys()), key="sel_legenda")
 
-        if st.button("📝 Gerar Legendas", type="primary", use_container_width=True):
+        if st.button("📝 Gerar Legendas", type="primary", width="stretch"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
@@ -1571,7 +1758,7 @@ with tab5:
                     data=json.dumps(legendas_data, ensure_ascii=False, indent=2),
                     file_name="legendas_carrossel.json",
                     mime="application/json",
-                    use_container_width=True,
+                    width="stretch",
                 )
             with c2:
                 txt_legs = "\n\n---\n\n".join(
@@ -1583,7 +1770,7 @@ with tab5:
                     data=txt_legs,
                     file_name="legendas_carrossel.txt",
                     mime="text/plain",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
@@ -1600,7 +1787,7 @@ with tab6:
         ideias_sel = st.session_state["ideias_selecionadas"]
         st.markdown(f"**{len(ideias_sel)} ideia(s) selecionada(s).**")
 
-        if st.button("📅 Gerar Cronograma", type="primary", use_container_width=True):
+        if st.button("📅 Gerar Cronograma", type="primary", width="stretch"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
@@ -1705,7 +1892,7 @@ with tab6:
             leads_wpp    = st.number_input("Leads WhatsApp",         min_value=0, value=0)
             data_post    = st.date_input("Data da publicação")
 
-        submitted = st.form_submit_button("💾 Salvar Métricas", use_container_width=True)
+        submitted = st.form_submit_button("💾 Salvar Métricas", width="stretch")
 
         if submitted:
             if not post_titulo.strip():
@@ -1803,7 +1990,7 @@ with tab6:
     # ── V1: Importar métricas via Instagram Graph API ──────────────────────────
     st.divider()
     st.markdown("### 📱 Importar Métricas do Instagram (API)")
-    st.caption("Preencha as credenciais no .env. A API busca impressões, salvamentos, shares e comentários.")
+    st.caption("Preencha as credenciais no .env. A API busca alcance, impressões, salvamentos, shares e comentários.")
 
     # Leitura de variáveis de ambiente
     token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
@@ -1812,7 +1999,7 @@ with tab6:
     if not token or not page_id:
         st.warning("⚠️ Configure `INSTAGRAM_ACCESS_TOKEN` e `INSTAGRAM_PAGE_ID` no arquivo .env.")
     else:
-        if st.button("⬇️ Buscar Métricas do Instagram", key="btn_fetch_instagram", use_container_width=True):
+        if st.button("⬇️ Buscar Métricas do Instagram", key="btn_fetch_instagram", width="stretch"):
             with st.spinner("🤖 Buscando métricas..."):
                 metrics = fetch_post_metrics(token, page_id)
                 if metrics:
@@ -1826,7 +2013,10 @@ with tab6:
                     else:
                         st.info("ℹ️ Nenhuma nova métrica encontrada.")
                 else:
-                    st.error("❌ Não foi possível buscar métricas. Verifique token e page_id.")
+                    st.error(
+                        "❌ Não foi possível buscar métricas de alcance. "
+                        "Verifique token, page_id e se a conta é Business/Creator."
+                    )
 
     # Histórico de métricas
     if st.session_state.get("historico_metricas"):
@@ -1847,7 +2037,7 @@ with tab6:
             st.success(f"✅ {removidas} entrada(s) removida(s).")
 
         df = pd.DataFrame(st.session_state["historico_metricas"])
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
 
         # ── M2: gráfico de KPIs ao longo do tempo ──────────────────────────
         st.markdown("### 📈 KPIs ao Longo do Tempo")
@@ -1900,7 +2090,7 @@ with tab7:
         with c3:
             fazer_cronograma = st.checkbox("📅 Cronograma",              value=True)
 
-        if st.button("🚀 Processar Tudo em Lote", type="primary", use_container_width=True):
+        if st.button("🚀 Processar Tudo em Lote", type="primary", width="stretch"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
@@ -1937,6 +2127,15 @@ with tab7:
                 st.markdown("#### 🎨 Prompts Gerados")
                 for _key, item in prompts_items.items():
                     with st.expander(f"📋 {item['titulo']}", expanded=False):
+                        for corr in item.get("corrigidos") or []:
+                            st.success(f"🛠️ {corr}")
+                        avisos_lote = item.get("avisos")
+                        if avisos_lote is None:
+                            avisos_lote = validate_prompts(
+                                item.get("prompts") or {}, item.get("ideia")
+                            )
+                        for a in avisos_lote:
+                            st.warning(a)
                         for slide in item["prompts"].get("slides", []):
                             sn = slide.get("slide_num", "?")
                             st.markdown(f"**Slide {sn}:**")
@@ -1970,7 +2169,7 @@ with tab7:
 
             # Export ZIP completo
             st.divider()
-            if st.button("📥 Exportar Lote Completo (ZIP)", use_container_width=True):
+            if st.button("📥 Exportar Lote Completo (ZIP)", width="stretch"):
                 zip_buf = BytesIO()
                 with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
                     for _key, item in prompts_items.items():
@@ -1978,6 +2177,10 @@ with tab7:
                         zf.writestr(
                             f"prompts/{fname}.json",
                             json.dumps(item["prompts"], ensure_ascii=False, indent=2),
+                        )
+                        zf.writestr(
+                            f"prompts/{fname}.txt",
+                            formatar_txt_prompts(item["prompts"]),
                         )
                     for _key, item in slides_items.items():
                         folder = item["titulo"][:30].replace(" ", "_")
@@ -1993,7 +2196,7 @@ with tab7:
                     data=zip_buf.getvalue(),
                     file_name=f"lote_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
                     mime="application/zip",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
@@ -2008,8 +2211,10 @@ with tab8:
     def _format_ideia(ideia: dict) -> dict:
         """Normaliza uma ideia para o schema único compartilhado entre abas."""
         return {
+            "id": ideia.get("id", ""),
             "titulo": ideia.get("titulo", ""),
             "eixo": ideia.get("eixo", "Didático"),
+            "curso": ideia.get("curso", ""),
             "persona_alvo": ideia.get("persona_alvo", ""),
             "tipo_hook": ideia.get("tipo_hook", ""),
             "tema": ideia.get("tema", ""),
@@ -2106,16 +2311,13 @@ with tab8:
         with pip_col3:
             pip_cronograma = st.checkbox("📅 Gerar Cronograma", value=True, key="pip_cron")
 
-        if st.button("🚀 Executar Pipeline Completo", type="primary", use_container_width=True, key="btn_pipeline"):
+        if st.button("🚀 Executar Pipeline Completo", type="primary", width="stretch", key="btn_pipeline"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini na barra lateral.")
             else:
-                # Calcular total de etapas para progress bar
-                total_steps = 2  # trends + ideas (sempre)
-                if pip_prompts:
-                    total_steps += 1
-                if pip_legendas:
-                    total_steps += 1
+                # O pipeline processa cada ideia selecionada em prompts e legendas.
+                # O total é recalculado depois que o Gemini devolve as ideias.
+                total_steps = 2
                 if pip_cronograma:
                     total_steps += 1
 
@@ -2149,6 +2351,8 @@ with tab8:
                 else:
                     trends_data = call_gemini_json(PROMPT_TENDENCIAS, temperature=TEMPERATURAS["tendencias"])
 
+                trends_data = _normalizar_tendencias(trends_data)
+
                 if trends_data:
                     st.session_state["tendencias"] = trends_data
                     st.session_state["tendencias_texto"] = json.dumps(trends_data, ensure_ascii=False)
@@ -2168,51 +2372,76 @@ with tab8:
 
                     ideas_data = call_gemini_json(get_prompt_ideias(), ideas_context, temperature=TEMPERATURAS["ideias"])
 
-                    if ideas_data and "ideias" in ideas_data:
+                    if (
+                        ideas_data
+                        and isinstance(ideas_data.get("ideias"), list)
+                        and ideas_data["ideias"]
+                    ):
                         st.session_state["ideias"] = ideas_data
                         save_geracao("ideias", ideas_data)
 
                         # Auto-selecionar todas as ideias para o pipeline
                         ideias_formatadas = [_format_ideia(i) for i in ideas_data["ideias"]]
+                        _ensure_idea_ids(ideias_formatadas, "pipeline")
                         st.session_state["ideias_selecionadas"] = ideias_formatadas
+                        total_steps = 2 + len(ideias_formatadas) * (
+                            int(pip_prompts) + int(pip_legendas)
+                        ) + int(pip_cronograma)
                     else:
                         pipeline_ok = False
 
                 step += 1
                 progress.progress(step / total_steps)
 
+                pipeline_warnings = []
+
                 # ── Etapa 3: Prompts de Imagem (opcional) ────────────────────
                 if pipeline_ok and pip_prompts:
-                    status.info(f"🎨 **[{step + 1}/{total_steps}]** Gerando prompts visuais para {len(ideias_formatadas)} ideias…")
-                    # Gerar prompts para a primeira ideia selecionada
-                    first_idea = ideias_formatadas[0]
-                    prompts_data = gerar_prompts_ideia(first_idea, forcar=True)
-                    if prompts_data:
-                        # Mesmo formato da aba 3 ({titulo, prompts, ideia}) — exibição compatível
-                        st.session_state.setdefault("prompts_lote", []).append(
-                            {
-                                "titulo": first_idea.get("titulo", "Ideia"),
-                                "prompts": prompts_data,
-                                "ideia": first_idea,
-                            }
+                    for ideia in ideias_formatadas:
+                        titulo = ideia.get("titulo", "Ideia")
+                        status.info(f"🎨 **[{step + 1}/{total_steps}]** Gerando prompts: {titulo}…")
+                        avisos_pip: list = []
+                        corrigidos_pip: list = []
+                        prompts_data = gerar_prompts_ideia(
+                            ideia, forcar=True, avisos=avisos_pip, corrigidos=corrigidos_pip
                         )
-                        save_geracao("prompts", {"titulo": first_idea.get("titulo", "Ideia"), "prompts": prompts_data})
-
-                    step += 1
-                    progress.progress(step / total_steps)
+                        if prompts_data:
+                            item = {
+                                "titulo": titulo,
+                                "prompts": prompts_data,
+                                "ideia": ideia,
+                                "avisos": avisos_pip,
+                                "corrigidos": corrigidos_pip,
+                            }
+                            st.session_state.setdefault("prompts_lote", []).append(item)
+                            save_geracao("prompts", item)
+                            if avisos_pip:
+                                pipeline_warnings.append(
+                                    f"{titulo}: {len(avisos_pip)} aviso(s) de validação nos prompts"
+                                )
+                        else:
+                            pipeline_warnings.append(f"Prompts não gerados para: {titulo}")
+                        step += 1
+                        progress.progress(step / total_steps)
 
                 # ── Etapa 4: Legendas (opcional) ─────────────────────────────
                 if pipeline_ok and pip_legendas:
-                    status.info(f"📝 **[{step + 1}/{total_steps}]** Gerando legendas Instagram…")
-                    first_idea = ideias_formatadas[0]
-                    legendas_data = gerar_legendas_ideia(first_idea, forcar=True)
-                    if legendas_data:
-                        legendas_data["titulo"] = first_idea.get("titulo", "Ideia")
-                        st.session_state.setdefault("legendas_lote", []).append(legendas_data)
-                        save_geracao("legendas", legendas_data)
-
-                    step += 1
-                    progress.progress(step / total_steps)
+                    for ideia in ideias_formatadas:
+                        titulo = ideia.get("titulo", "Ideia")
+                        status.info(f"📝 **[{step + 1}/{total_steps}]** Gerando legenda: {titulo}…")
+                        legendas_data = gerar_legendas_ideia(ideia, forcar=True)
+                        if legendas_data:
+                            item = {
+                                **legendas_data,
+                                "titulo": titulo,
+                                "ideia": ideia,
+                            }
+                            st.session_state.setdefault("legendas_lote", []).append(item)
+                            save_geracao("legendas", item)
+                        else:
+                            pipeline_warnings.append(f"Legendas não geradas para: {titulo}")
+                        step += 1
+                        progress.progress(step / total_steps)
 
                 # ── Etapa 5: Cronograma (opcional) ───────────────────────────
                 if pipeline_ok and pip_cronograma:
@@ -2229,7 +2458,9 @@ with tab8:
                 progress.progress(1.0)
                 if pipeline_ok:
                     status.empty()
-                    st.success("✅ **Pipeline concluído!** Todas as tabs foram populadas:")
+                    st.success("✅ **Pipeline concluído!** Todas as ideias foram processadas:")
+                    for warning in pipeline_warnings:
+                        st.warning(f"⚠️ {warning}")
                     result_cols = st.columns(5)
                     tabs_populated = ["📈 Tendências", "💡 Ideias"]
                     if pip_prompts:
@@ -2280,7 +2511,7 @@ with tab8:
                 )
 
         # Botão de busca com streaming
-        if st.button("🔍 Buscar no NotebookLM", type="primary", use_container_width=True):
+        if st.button("🔍 Buscar no NotebookLM", type="primary", width="stretch"):
             if not selected_nb_id:
                 st.warning("⚠️ Selecione um notebook primeiro.")
             else:
@@ -2389,6 +2620,7 @@ with tab8:
                         if config["result_key"] == "ideias":
                             ideias_list = key_data
                             ideias_formatadas = [_format_ideia(i) for i in ideias_list]
+                            _ensure_idea_ids(ideias_formatadas, "notebooklm")
                             st.session_state["ideias"] = {"ideias": ideias_formatadas}
                             st.session_state["ideias_selecionadas"] = ideias_formatadas
                             save_geracao("ideias", {"ideias": ideias_formatadas})
@@ -2435,9 +2667,9 @@ with tab8:
                         cor = CORES["secundaria"] if potencial == "alto" else CORES["destaque"] if potencial == "médio" else CORES["texto_sec"]
                         st.markdown(f"""
                         <div class="metric-box">
-                            <strong style="color:{cor};">{t.get('nome', '')}</strong>
-                            <span style="color:{CORES['texto_sec']}; font-size:0.82em;">[{potencial}]</span>
-                            <br><span style="color:{CORES['texto']}; font-size:0.88em;">{t.get('descricao', '')}</span>
+                            <strong style="color:{cor};">{_esc(t.get('nome', ''))}</strong>
+                            <span style="color:{CORES['texto_sec']}; font-size:0.82em;">[{_esc(potencial)}]</span>
+                            <br><span style="color:{CORES['texto']}; font-size:0.88em;">{_esc(t.get('descricao', ''))}</span>
                         </div>
                         """, unsafe_allow_html=True)
 
@@ -2462,16 +2694,18 @@ with tab8:
                     # Botões de ação para enviar ideias
                     col_act1, col_act2 = st.columns(2)
                     with col_act1:
-                        if st.button("📥 Carregar na aba 💡 Ideias", type="primary", use_container_width=True):
+                        if st.button("📥 Carregar na aba 💡 Ideias", type="primary", width="stretch"):
                             ideias_formatadas = [_format_ideia(i) for i in data["ideias"]]
+                            _ensure_idea_ids(ideias_formatadas, "notebooklm")
                             st.session_state["ideias"] = {"ideias": ideias_formatadas}
                             st.session_state["ideias_selecionadas"] = ideias_formatadas
                             save_geracao("ideias", {"ideias": ideias_formatadas})
                             st.success(f"✅ {len(ideias_formatadas)} ideias salvas! Abra a aba '💡 Ideias' para visualizar.")
 
                     with col_act2:
-                        if st.button("🎨 Enviar para Gerador de Prompts", use_container_width=True):
+                        if st.button("🎨 Enviar para Gerador de Prompts", width="stretch"):
                             ideias_formatadas = [_format_ideia(i) for i in data["ideias"]]
+                            _ensure_idea_ids(ideias_formatadas, "notebooklm")
                             st.session_state["ideias_selecionadas"] = ideias_formatadas
                             st.session_state["nb_ideias_para_prompts"] = True
                             st.success(f"✅ {len(ideias_formatadas)} ideias enviadas para Prompts!")
@@ -2517,12 +2751,12 @@ with tab8:
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("📤 Enviar como Tendências", use_container_width=True):
+                if st.button("📤 Enviar como Tendências", width="stretch"):
                     st.session_state["tendencias_texto"] = result
                     st.success("✅ Enviado! Vá para aba '📈 Tendências'")
 
             with col2:
-                if st.button("📤 Enviar como Contexto para Ideias", use_container_width=True):
+                if st.button("📤 Enviar como Contexto para Ideias", width="stretch"):
                     st.session_state["nb_contexto_para_ideias"] = result
                     st.success("✅ Enviado! Vá para aba '💡 Ideias' e use este contexto")
 
@@ -2572,7 +2806,7 @@ with tab9:
             help="Grava a requisição completa como pergunta no notebook ativo do Gemini Notebook.",
         )
 
-        if st.button("🎬 Montar Requisição de Vídeo", type="primary", use_container_width=True, key="btn_video"):
+        if st.button("🎬 Montar Requisição de Vídeo", type="primary", width="stretch", key="btn_video"):
             if not _api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
@@ -2633,7 +2867,7 @@ with tab9:
 
                 # Gravar no Notebook via CLI
                 if salvar_nlm and nlm.is_nlm_available():
-                    if st.button("🔬 Gravar Requisição no Gemini Notebook", use_container_width=True, key="btn_video_nlm"):
+                    if st.button("🔬 Gravar Requisição no Gemini Notebook", width="stretch", key="btn_video_nlm"):
                         with st.spinner("📚 Enviando para o Gemini Notebook…"):
                             nb_id = st.session_state.get("_nb_active_id") or NOTEBOOK_ID_PADRAO
                             resposta = nlm.ask_notebook(nb_id, requisicao_completa)
@@ -2658,7 +2892,7 @@ with tab9:
                     data=json.dumps(vd, ensure_ascii=False, indent=2),
                     file_name="requisicao_video_curto.json",
                     mime="application/json",
-                    use_container_width=True,
+                    width="stretch",
                 )
             with c2:
                 st.download_button(
@@ -2666,7 +2900,7 @@ with tab9:
                     data=requisicao_completa,
                     file_name="requisicao_video_curto.txt",
                     mime="text/plain",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
@@ -2676,8 +2910,6 @@ with tab9:
 with tab10:
     st.markdown("## 🗂️ Histórico de Gerações")
     st.markdown("Últimas 50 gerações salvas em disco. Expanda para ver o conteúdo e restaure qualquer uma.")
-
-    from persistence import load_historico_geracoes  # noqa: PLC0415
 
     historico = load_historico_geracoes()
 
@@ -2705,6 +2937,8 @@ with tab10:
             tipo = entrada.get("tipo", "?")
             quando = entrada.get("gerado_em", "?")
             dados = entrada.get("dados", {})
+            if tipo == "tendencias":
+                dados = _normalizar_tendencias(dados)
             session_key = _TIPO_META.get(tipo, (tipo, "📦"))[0]
             icon = _TIPO_META.get(tipo, (tipo, "📦"))[1]
 
@@ -2727,12 +2961,13 @@ with tab10:
             with st.expander(f"{icon} {tipo.title()} — {quando} — {resumo}", expanded=False):
                 # Botão restaurar (M3)
                 if session_key:
-                    if st.button("↩️ Restaurar esta geração", key=f"restaurar_hist_{pos}", use_container_width=True):
+                    if st.button("↩️ Restaurar esta geração", key=f"restaurar_hist_{pos}", width="stretch"):
                         if session_key == "prompts_lote":
                             st.session_state.setdefault("prompts_lote", []).append(dados)
                         elif session_key == "legendas_lote":
                             st.session_state.setdefault("legendas_lote", []).append(dados)
                         elif session_key == "ideias":
+                            _ensure_idea_ids(dados.get("ideias", []), "historico")
                             st.session_state["ideias"] = dados
                             st.session_state["ideias_selecionadas"] = dados.get("ideias", [])
                         else:
@@ -2741,3 +2976,53 @@ with tab10:
                         st.rerun()
 
                 st.json(dados, expanded=False)
+
+    st.divider()
+    st.markdown("### 💾 Backup e restauração")
+    st.caption("Exporte métricas e histórico para transportar ou proteger os dados locais.")
+
+    backup_col, restore_col = st.columns(2)
+    with backup_col:
+        st.download_button(
+            "⬇️ Exportar backup completo",
+            data=build_backup_zip(),
+            file_name=f"motor_carrosseis_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+            width="stretch",
+        )
+
+    with restore_col:
+        backup_upload = st.file_uploader(
+            "Importar backup (.zip)",
+            type=["zip"],
+            key="backup_upload",
+        )
+
+    if backup_upload is not None:
+        backup_bytes = backup_upload.getvalue()
+        try:
+            backup_info = preview_backup(backup_bytes)
+            st.info(
+                f"Backup de {backup_info['manifest'].get('gerado_em', 'data desconhecida')} · "
+                f"{backup_info['total_itens']} registros encontrados."
+            )
+            modo_backup = st.radio(
+                "Modo de importação",
+                ["merge", "replace"],
+                format_func=lambda modo: (
+                    "Mesclar com os dados atuais" if modo == "merge" else "Substituir os dados atuais"
+                ),
+                horizontal=True,
+                key="backup_mode",
+            )
+            if st.button("📥 Aplicar backup", type="primary", key="apply_backup"):
+                ok, mensagem = apply_backup_zip(backup_bytes, mode=modo_backup)
+                if ok:
+                    # Força a próxima execução a reconstruir a sessão a partir do disco.
+                    st.session_state.pop("_synced", None)
+                    st.success(mensagem)
+                    st.rerun()
+                else:
+                    st.error(mensagem)
+        except (ValueError, OSError, zipfile.BadZipFile) as exc:
+            st.error(f"❌ Backup inválido: {exc}")

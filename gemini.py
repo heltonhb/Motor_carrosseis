@@ -33,7 +33,6 @@ GEMINI_MODELS = [
 ]
 
 
-@st.cache_data(ttl=3600)  # valida a lista 1x por hora (P7)
 def _modelos_disponiveis() -> tuple[str, ...]:
     """
     Retorna os nomes de modelos realmente disponíveis para ESTA chave.
@@ -41,6 +40,20 @@ def _modelos_disponiveis() -> tuple[str, ...]:
     latência em cada chamada quando a lista contém modelo inexistente.
     Fallback: se a listagem falhar (rede/offline), devolve a lista estática.
     """
+    api_key = _get_api_key()
+    if not api_key:
+        return tuple(GEMINI_MODELS)
+
+    fingerprint = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    cache_key = "_gemini_modelos_disponiveis"
+    cached = st.session_state.get(cache_key)
+    if (
+        isinstance(cached, dict)
+        and cached.get("fingerprint") == fingerprint
+        and cached.get("expires_at", 0) > time.time()
+    ):
+        return tuple(cached["modelos"])
+
     try:
         client = _get_client()
         if client is None:
@@ -48,9 +61,16 @@ def _modelos_disponiveis() -> tuple[str, ...]:
         nomes = {m.name.removeprefix("models/") for m in client.models.list() if m.name}
         validos = [m for m in GEMINI_MODELS if m in nomes]
         if validos:
-            return tuple(validos)
-        # nenhum dos nomes bateu — mantém lista estática como fallback
-        return tuple(GEMINI_MODELS)
+            modelos = tuple(validos)
+        else:
+            # nenhum dos nomes bateu — mantém lista estática como fallback
+            modelos = tuple(GEMINI_MODELS)
+        st.session_state[cache_key] = {
+            "fingerprint": fingerprint,
+            "expires_at": time.time() + 3600,
+            "modelos": modelos,
+        }
+        return modelos
     except Exception as exc:  # rede indisponível, chave inválida etc.
         logger.warning("models.list() falhou (%s); usando lista estática", exc)
         return tuple(GEMINI_MODELS)
@@ -90,10 +110,35 @@ def _get_client() -> genai.Client | None:
     return genai.Client(api_key=api_key)
 
 
-def _cache_key(prompt: str, context: str) -> str:
-    """Gera uma chave de cache determinística para o par (prompt, context)."""
-    raw = f"{prompt}||{context}"
+def _cache_key(prompt: str, context: str, images: list | None = None) -> str:
+    """Gera uma chave de cache determinística para (prompt, context[, imagens]).
+
+    Com imagens anexadas (FLOW_FOTOS), o fingerprint dos bytes entra na chave
+    — trocar a foto troca a entrada de cache.
+    """
+    key_fingerprint = hashlib.sha256(_get_api_key().encode("utf-8")).hexdigest()[:16]
+    raw = f"{key_fingerprint}||{prompt}||{context}"
+    if images:
+        h = hashlib.sha256()
+        for nome, mime, dados in images:
+            h.update(str(nome).encode("utf-8"))
+            h.update(str(mime).encode("utf-8"))
+            h.update(dados or b"")
+        raw += f"||imgs:{h.hexdigest()[:16]}"
     return "gemini_cache_" + hashlib.md5(raw.encode()).hexdigest()[:16]
+
+
+def _conteudo(prompt: str, context: str, images: list | None = None):
+    """Conteúdo da chamada: texto puro ou texto + partes de imagem anexadas."""
+    full_prompt = f"{prompt}\n\n{context}" if context else prompt
+    if not images:
+        return full_prompt
+    partes = [
+        types.Part.from_bytes(data=dados, mime_type=mime)
+        for _nome, mime, dados in images
+    ]
+    partes.append(types.Part.from_text(text=full_prompt))
+    return [types.Content(role="user", parts=partes)]
 
 
 def _is_rate_limit(exc: Exception) -> bool:
@@ -108,13 +153,21 @@ def _is_server_error(exc: Exception) -> bool:
     return any(code in msg for code in ("500", "502", "503", "504"))
 
 
-def call_gemini(prompt: str, context: str = "", max_retries: int = 3, temperature: float = 0.7) -> str:
+def call_gemini(
+    prompt: str,
+    context: str = "",
+    max_retries: int = 3,
+    temperature: float = 0.7,
+    images: list | None = None,
+) -> str:
     """
     Chama a API Gemini via SDK nativo com:
     - Cache por sessão (evita chamadas duplicadas idênticas)
     - Fallback automático entre modelos disponíveis
     - Retry com backoff exponencial para 429 e erros 5xx
     - Exceções tipadas (sem bare except)
+    - `images` opcional: tuplas (nome, mime_type, bytes) anexadas ao prompt
+      (flag FLOW_FOTOS)
 
     Retorna o texto gerado ou string vazia em caso de falha total.
     """
@@ -124,18 +177,18 @@ def call_gemini(prompt: str, context: str = "", max_retries: int = 3, temperatur
         return ""
 
     # ── Cache de sessão ──────────────────────────────────────────────────────
-    ck = _cache_key(prompt, context)
+    ck = _cache_key(prompt, context, images)
     if ck in st.session_state:
         return st.session_state[ck]
 
-    full_prompt = f"{prompt}\n\n{context}" if context else prompt
+    contents = _conteudo(prompt, context, images)
 
     for model_name in _modelos_disponiveis():
         for attempt in range(max_retries):
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=full_prompt,
+                    contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_INSTRUCTION_PERSONA,
                         temperature=temperature,
@@ -185,6 +238,7 @@ def call_gemini_json(
     context: str = "",
     max_retries: int = 3,
     temperature: float = 0.7,
+    images: list | None = None,
 ) -> dict:
     """
     Chama a API Gemini com JSON estruturado garantido.
@@ -194,6 +248,9 @@ def call_gemini_json(
     Em caso de falha no structured output, faz fallback para call_gemini
     + extract_json.
 
+    `images` opcional (flag FLOW_FOTOS): tuplas (nome, mime_type, bytes)
+    anexadas junto com o texto — quando ausente, geração só com texto.
+
     Retorna dict com os dados ou dict vazio em caso de falha.
     """
     client = _get_client()
@@ -202,18 +259,23 @@ def call_gemini_json(
         return {}
 
     # ── Cache de sessão (prefixo diferente para JSON) ────────────────────────
-    ck = _cache_key(prompt, context) + "_json"
-    if ck in st.session_state:
-        return st.session_state[ck]
+    ck = _cache_key(prompt, context, images) + "_json"
+    cached = st.session_state.get(ck)
+    if cached is not None:
+        if isinstance(cached, dict):
+            return cached
+        # Descarta respostas antigas em lista que foram gravadas antes do
+        # contrato de JSON estruturado exigir um objeto.
+        st.session_state.pop(ck, None)
 
-    full_prompt = f"{prompt}\n\n{context}" if context else prompt
+    contents = _conteudo(prompt, context, images)
 
     for model_name in _modelos_disponiveis():
         for attempt in range(max_retries):
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=full_prompt,
+                    contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_INSTRUCTION_PERSONA,
                         response_mime_type="application/json",
@@ -225,6 +287,9 @@ def call_gemini_json(
                 text = response.text or ""
                 if text:
                     data = json.loads(text)
+                    if not isinstance(data, dict):
+                        logger.warning("Modelo %s retornou JSON que não é objeto", model_name)
+                        break
                     st.session_state[ck] = data
                     return data
 
@@ -235,7 +300,7 @@ def call_gemini_json(
                     model_name,
                 )
                 data = extract_json(response.text if response else "")
-                if data:
+                if isinstance(data, dict) and data:
                     st.session_state[ck] = data
                     return data
                 break  # próximo modelo
@@ -267,20 +332,20 @@ def call_gemini_json(
 
     # ── Fallback: call_gemini + extract_json ──────────────────────────────────
     st.warning("⚠️ JSON estruturado falhou. Tentando modo texto + parsing…")
-    raw = call_gemini(prompt, context, max_retries, temperature)
+    raw = call_gemini(prompt, context, max_retries, temperature, images=images)
     if raw:
         data = extract_json(raw)
-        if data:
-            ck_base = _cache_key(prompt, context) + "_json"
+        if isinstance(data, dict) and data:
+            ck_base = _cache_key(prompt, context, images) + "_json"
             st.session_state[ck_base] = data
             return data
 
     return {}
 
 
-def invalidate_cache(prompt: str, context: str = "") -> None:
+def invalidate_cache(prompt: str, context: str = "", images: list | None = None) -> None:
     """Remove entradas do cache de sessão (texto e JSON)."""
-    ck = _cache_key(prompt, context)
+    ck = _cache_key(prompt, context, images)
     st.session_state.pop(ck, None)
     st.session_state.pop(ck + "_json", None)
 
@@ -305,4 +370,3 @@ def _clean_json_string(s: str) -> str:
     s = re.sub(r"[\x00-\x1f\x7f]", " ", s)
 
     return s
-

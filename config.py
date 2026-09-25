@@ -3,6 +3,9 @@ config.py — Constantes globais, dados da unidade e KPIs.
 Centraliza toda configuração do app para facilitar manutenção.
 """
 
+import os
+from pathlib import Path
+
 # ─── Dados da Unidade ────────────────────────────────────────────────────────
 UNIDADE = {
     "nome": "Ensina Mais Tatuapé",
@@ -39,6 +42,15 @@ FORMATO = {
     "janela_horas_entre_posts": 72,
     "horarios_otimos": ["11:30", "12:30", "18:30", "19:30"],
 }
+
+TAG_NAVEGACAO = "Mova para o próximo ➔"
+
+# ─── Fotos anexadas ao Gemini (opcional) ─────────────────────────────────────
+# O app PRINCIPAL produz prompts e sugere quais fotos anexar no Google Flow.
+# Anexar as fotos REAIS ao Gemini é opcional: com FLOW_FOTOS=true o Gemini
+# recebe as cenas do catálogo (refs/) junto com o prompt de imagem; com
+# false (padrão) a geração é só texto — mais barata e igualmente válida.
+FLOW_FOTOS = os.environ.get("FLOW_FOTOS", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # ─── Paleta de Cores Institucional ──────────────────────────────────────────
 CORES = {
@@ -113,8 +125,8 @@ EMPTY_STATES = {
 
 # ─── Fontes ──────────────────────────────────────────────────────────────────
 FONTES = [
-    "fonts/Montserrat-Bold.ttf",
-    "fonts/Poppins-Bold.ttf",
+    str(Path(__file__).resolve().parent / "fonts" / "Montserrat-Bold.ttf"),
+    str(Path(__file__).resolve().parent / "fonts" / "Poppins-Bold.ttf"),
     "/usr/share/fonts/noto/NotoSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
@@ -142,12 +154,13 @@ EIXOS = {
 }
 
 # ─── Diretório de dados persistidos ─────────────────────────────────────────
-DATA_DIR = "data"
-METRICAS_FILE = f"{DATA_DIR}/metricas.json"
-HISTORICO_FILE = f"{DATA_DIR}/historico_geracoes.json"
-IDEIAS_ESTADO_FILE = f"{DATA_DIR}/ideias_estado.json"
+PROJECT_DIR = Path(__file__).resolve().parent
+DATA_DIR = str(PROJECT_DIR / "data")
+METRICAS_FILE = str(PROJECT_DIR / "data" / "metricas.json")
+HISTORICO_FILE = str(PROJECT_DIR / "data" / "historico_geracoes.json")
+IDEIAS_ESTADO_FILE = str(PROJECT_DIR / "data" / "ideias_estado.json")
+SQLITE_FILE = str(PROJECT_DIR / "data" / "motor_carrosseis.sqlite3")
 
 # ─── Configurações do NotebookLM ─────────────────────────────────────────────
 NOTEBOOK_ID_PADRAO = "7f415de3-0f02-4eb9-b5f1-3d104a00354a"
 NOTEBOOK_TITULO_PADRAO = "Estratégia de Engajamento e Crescimento: Ensina Mais Tatuapé"
-

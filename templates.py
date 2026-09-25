@@ -12,7 +12,8 @@ class SlideEstrutura:
     tipo: str          # Capa, Segunda Capa, Entrega, Ponte, Prova, CTA
     texto: str
     usa_foto_real: bool = False
-    tipo_foto: str | None = None  # "fachada" | "laboratorio" | "alunos" | None
+    # chave de cena do catálogo único refs/catalogo.json (None = sem foto)
+    tipo_foto: str | None = None
 
 
 @dataclass
@@ -120,7 +121,7 @@ TEMPLATES: dict[str, dict] = {
             SlideEstrutura(3, "Entrega",      "Método passo a passo — etapa 1"),
             SlideEstrutura(4, "Entrega",      "Método passo a passo — etapa 2"),
             SlideEstrutura(5, "Entrega",      "Método passo a passo — etapa 3"),
-            SlideEstrutura(6, "Ponte",        "Como o ensino individualizado resolve a lacuna", True, "alunos"),
+            SlideEstrutura(6, "Ponte",        "Como o ensino individualizado resolve a lacuna", True, "alunos_apoio"),
             SlideEstrutura(7, "Prova",        "Foto real da fachada — Rua Coelho Lisboa, 783",  True, "fachada"),
             SlideEstrutura(8, "CTA",          "Salve este post! Comente DESAFIO ou chame no WhatsApp (11) 94475-0009"),
         ],
@@ -138,7 +139,7 @@ TEMPLATES: dict[str, dict] = {
             SlideEstrutura(3, "Entrega",      "Atitude prática 1 dos pais em casa"),
             SlideEstrutura(4, "Entrega",      "Atitude prática 2 dos pais em casa"),
             SlideEstrutura(5, "Entrega",      "Atitude prática 3 dos pais em casa"),
-            SlideEstrutura(6, "Ponte",        "Diferença entre estudo passivo e ativo",          True, "alunos"),
+            SlideEstrutura(6, "Ponte",        "Diferença entre estudo passivo e ativo",          True, "alunos_apoio"),
             SlideEstrutura(7, "Prova",        "Foto real da fachada — portão branco, Tatuapé",   True, "fachada"),
             SlideEstrutura(8, "CTA",          "Envie para outro pai/mãe ou fale no WhatsApp: (11) 94475-0009"),
         ],
