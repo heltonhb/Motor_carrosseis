@@ -21,6 +21,7 @@ from gemini import call_gemini_json, invalidate_cache
 from image_utils import generate_all_slides
 from prompts import (
     FRASE_FACHADA,
+    FRASE_FOTO_REAL,
     PADROES_PROIBIDOS_FOTO,
     PROMPT_LEGENDAS,
     PROMPT_PROMPTS_IMAGEM,
@@ -325,8 +326,12 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
         overlay = (slide.get("text_overlay") or "").strip()
 
         if snum in {1, 4, 5} and prompt_en:
-            if prompt_en.lower().startswith("authentic school photo"):
-                # Conforme: só limpa padrões genéricos residuais e ancora os campos
+            is_conforme = (
+                FRASE_FOTO_REAL.lower() in prompt_en.lower()
+                or "use the provided reference photo" in prompt_en.lower()
+            )
+            if is_conforme:
+                # Conforme: limpa padrões genéricos residuais e ancora os campos
                 limpo = _PADROES_PROIBIDOS_RE.sub("", prompt_en).strip()
                 if limpo != prompt_en:
                     slide["prompt_en"] = limpo
@@ -337,9 +342,9 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
                     slide["tipo_foto"] = _TIPOS_RODIZIO[snum]
                 _normaliza_refs(slide, slide["tipo_foto"])
             else:
-                # ── Slide NÃO-conforme: reescrever o prompt_en ──────────────
+                # ── Slide NÃO-conforme: reescrever como composição ─────────
                 logger.info(
-                    "Slide %d: prompt_en não iniciava com 'Authentic school photo'. "
+                    "Slide %d: prompt_en sem cláusula de composição sobre foto. "
                     "Reescrevendo automaticamente.",
                     snum,
                 )
@@ -348,7 +353,7 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
                     tipo = _TIPOS_RODIZIO[snum]
                 cena = _CENAS_FOTO[tipo]
 
-                # Só o que está entre aspas — a frase da tag não pode entrar
+                # Extrair overlay do prompt original se existir
                 overlay_match = re.search(
                     r"text overlay in Brazilian Portuguese:\s*['\"]([^'\"]+)['\"]",
                     prompt_en,
@@ -359,7 +364,8 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
                 )
 
                 slide["prompt_en"] = (
-                    f"Authentic school photo of {cena}, "
+                    f"{FRASE_FOTO_REAL} "
+                    f"The scene depicts: {cena}. "
                     f"1080x1350 px vertical 4:5 format, "
                     f"centered elements respecting a 1:1 square safe zone (1080x1080 px) "
                     f"for Instagram grid preview. "
@@ -375,7 +381,7 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
                 _normaliza_refs(slide, tipo)
                 if corrigidos is not None:
                     corrigidos.append(
-                        f"slide {snum}: prompt_en reescrito com foto real ({tipo})"
+                        f"slide {snum}: prompt_en reescrito como composição sobre foto ({tipo})"
                     )
 
         _normaliza_refs(slide, slide.get("tipo_foto"))
@@ -389,6 +395,25 @@ def normalizar_prompts(dados: dict) -> dict:
     return _enforce_foto_real(dados)
 
 
+def inferir_curso(ideia: dict) -> str:
+    """Infere o curso oficial caso não venha explícito no dicionário da ideia."""
+    if ideia.get("curso"):
+        return str(ideia["curso"])
+    texto = (
+        f"{ideia.get('titulo', '')} {ideia.get('tema', '')} "
+        f"{' '.join(ideia.get('palavras_chave_seo', []))}"
+    ).lower()
+    if any(k in texto for k in ("robót", "robot", "lego", "maker")):
+        return "Tecnologia (Robótica)"
+    if any(k in texto for k in ("program", "código", "software", "algorit", "python", "scratch")):
+        return "Tecnologia (Programação)"
+    if any(k in texto for k in ("matemát", "cálculo", "número", "contas", "geometr", "fração", "álgebra", "fórmula", "operaç")):
+        return "Apoio Escolar (Matemática)"
+    if any(k in texto for k in ("português", "redação", "leitura", "interpretação", "alfabetiz", "gramát", "ortograf")):
+        return "Apoio Escolar (Português)"
+    return "Apoio Escolar"
+
+
 def _ctx_ideia(ideia: dict) -> str:
     """Contexto enxuto do carrossel para o Gemini.
 
@@ -400,6 +425,8 @@ def _ctx_ideia(ideia: dict) -> str:
         "palavras_chave_seo", "cta", "kpi_alvo",
     )
     slim = {c_: ideia[c_] for c_ in campos if ideia.get(c_)}
+    if "curso" not in slim:
+        slim["curso"] = inferir_curso(ideia)
     slim["slides_sugeridos"] = [
         {k: sl.get(k) for k in ("slide", "tipo", "texto")}
         for sl in ideia.get("slides_sugeridos") or []

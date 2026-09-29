@@ -93,3 +93,31 @@ def test_api_falhou_prompts_none_nao_quebra_lote():
         results = batch_engine.processar_lote([IDEIA_FAKE], fazer_cronograma=False)
     assert "prompts_0" not in results  # falhou silenciosamente, sem crash
     assert "slides_0" in results
+
+
+def test_inferir_curso():
+    assert batch_engine.inferir_curso({"titulo": "Robótica com Lego"}) == "Tecnologia (Robótica)"
+    assert batch_engine.inferir_curso({"titulo": "Aprenda a Programar em Python"}) == "Tecnologia (Programação)"
+    assert batch_engine.inferir_curso({"titulo": "Desafio das Frações e Cálculo"}) == "Apoio Escolar (Matemática)"
+    assert batch_engine.inferir_curso({"titulo": "Redação Nota 10 e Interpretação"}) == "Apoio Escolar (Português)"
+    assert batch_engine.inferir_curso({"curso": "Customizado"}) == "Customizado"
+
+
+def test_ctx_ideia_injeta_curso():
+    ideia = {
+        "titulo": "A Armadilha das Grandezas e Unidades na Matemática",
+        "tema": "Conversão de medidas e erros comuns",
+        "cta": "MEDIDAS",
+        "slides_sugeridos": [{"slide": 1, "tipo": "Capa", "texto": "Capa"}],
+    }
+    ctx = batch_engine._ctx_ideia(ideia)
+    assert "Apoio Escolar (Matemática)" in ctx
+    assert "MEDIDAS" in ctx
+
+
+def test_config_legendas_temperatura_e_prompt():
+    from prompts import PROMPT_LEGENDAS, TEMPERATURAS
+    assert TEMPERATURAS["legendas"] <= 0.6
+    assert "COERÊNCIA TEMÁTICA" in PROMPT_LEGENDAS
+    assert "É TERMINANTEMENTE PROIBIDO falar de robótica" in PROMPT_LEGENDAS
+

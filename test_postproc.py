@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from batch_engine import _FRASE_TAG, _enforce_foto_real
 from config import TAG_NAVEGACAO
+from prompts import FRASE_FOTO_REAL
 from refs_catalog import CENAS_FOTO, cena_valida
 
 
@@ -40,7 +41,7 @@ def test_reescreve_slides_thumbnail_com_foto_real():
     res = _enforce_foto_real(_dados())
     for slide in res["slides"]:
         if slide["slide_num"] in {1, 4, "1", "4"}:
-            assert slide["prompt_en"].lower().startswith("authentic school photo")
+            assert FRASE_FOTO_REAL.lower() in slide["prompt_en"].lower()
             assert slide["usa_foto_real"] is True
             assert slide["tipo_foto"] in CENAS_FOTO
             # regra 6: tag no prompt_en, regra 7: cláusula anti-personagem
@@ -127,7 +128,7 @@ def test_payload_legado_slide_1_vira_foto_real():
 
     res = normalizar_prompts(deepcopy(_PAYLOAD_LEGADO))
     s1 = res["slides"][0]
-    assert s1["prompt_en"].lower().startswith("authentic school photo")
+    assert FRASE_FOTO_REAL.lower() in s1["prompt_en"].lower()
     assert "off-white" not in s1["prompt_en"].lower()
     assert "floating white card" not in s1["prompt_en"].lower()
     assert _FRASE_TAG in s1["prompt_en"]
@@ -153,7 +154,8 @@ def test_normalizar_prompts_e_idempotente():
 # ─── Regressão: cláusula de overlay duplicada (slide 5 real) ────────────────
 # O Gemini parafraseou a cláusula ("highlight in Brazilian Portuguese") e o
 # enforce anexou uma segunda, com texto diferente e depois da tag: duas
-# instruções conflitantes para o modelo.
+# instruções conflitantes para o modelo. O enforce agora reescreve o slide
+# inteiro com FRASE_FOTO_REAL (composição sobre foto), unificando o overlay.
 
 def _slide5_duplicado() -> dict:
     return {
@@ -185,13 +187,18 @@ def test_slide5_clausula_duplicada_unificada():
     res = _enforce_foto_real(_slide5_duplicado())
     s5 = res["slides"][0]
     pen = s5["prompt_en"]
-    # uma única cláusula, com o texto canônico do text_overlay
+    # Slide 5 (thumbnail) é reescrito com FRASE_FOTO_REAL — composição sobre foto
+    assert FRASE_FOTO_REAL.lower() in pen.lower()
+    # Uma única cláusula de overlay, com o texto canônico do text_overlay
     assert re.findall(r"in Brazilian Portuguese: '[^']+'", pen) == [
         "in Brazilian Portuguese: 'Mentes estruturadas e inovadoras desde cedo.'"
     ]
     assert "Fundamental" not in pen
-    # a cláusula continua antes da tag; a tag fecha o prompt
-    assert pen.index("highlight in Brazilian Portuguese") < pen.index(_FRASE_TAG)
+    # A cláusula continua antes da tag; a tag fecha o prompt
+    assert "text overlay in brazilian portuguese" in pen.lower()
+    tag_pos = pen.lower().find(_FRASE_TAG.lower())
+    overlay_pos = pen.lower().find("text overlay in brazilian portuguese")
+    assert overlay_pos < tag_pos
     assert pen.rstrip().endswith("'.")
     assert s5["prompt_pt"] == "Mentes estruturadas e inovadoras desde cedo."
 

@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from parser_nlm import extract_json, extract_json_list
+from parser_nlm import extract_ideas_from_text, extract_json, extract_json_list, is_guideline_noise
 
 # ─── extract_json ────────────────────────────────────────────────────────────
 
@@ -99,3 +99,64 @@ def test_lista_sem_json():
 def test_objeto_nao_e_lista():
     # se o texto tem objeto (não array), extract_json_list deve devolver []
     assert extract_json_list('{"a": 1}') == []
+
+
+# ─── is_guideline_noise ──────────────────────────────────────────────────────
+
+def test_is_guideline_noise_detecta_diretrizes():
+    assert is_guideline_noise("Portfolio Estrito") is True
+    assert is_guideline_noise("Zero Menção a Personagens") is True
+    assert is_guideline_noise("Ineditismo Total") is True
+    assert is_guideline_noise("Ancoragem Local") is True
+    assert is_guideline_noise("Call to Action Direto") is True
+    assert is_guideline_noise("Capa") is False
+    assert is_guideline_noise("A Cultura do Rascunho em Matemática") is False
+
+
+def test_extract_json_envelope_cli_answer():
+    envelope = '{"answer": "{\\"ideias\\": [{\\"titulo\\": \\"Robótica\\"}]}", "conversation_id": "abc"}'
+    data = extract_json(envelope)
+    assert "ideias" in data
+    assert data["ideias"][0]["titulo"] == "Robótica"
+
+
+# ─── extract_ideas_from_text ─────────────────────────────────────────────────
+
+def test_extract_ideas_filtra_preambulo_e_diretrizes():
+    texto_com_ruido = """
+    Oi! Aqui é a Carol.
+    Diretrizes seguidas:
+    1. **Portfolio Estrito**: focar em exatas.
+    2. **Zero Menção a Personagens**: nenhuma menção.
+    3. **Ineditismo Total**: sem repetições.
+
+    ### 💡 IDEIA 1: A "Cultura do Rascunho" em Matemática
+    * **Eixo Temático**: Desconstrução Didática Prática
+    * **Curso Oficial**: Apoio Escolar — Matemática (Ensino Fundamental)
+    * **Palavra-chave (CTA)**: `RASCUNHO`
+    * **Justificativa Estratégica**: Reduz perda de notas por falta de organização.
+
+    #### Estrutura dos Slides:
+    1. **Capa**: Seu filho perde pontos por erros bobos no rascunho?
+    2. **Segunda Capa**: O problema não é falta de estudo, é organização visual.
+    3. **Problema**: Provas exigentes demandam rascunho estruturado.
+    4. **CTA**: Comente RASCUNHO no WhatsApp.
+
+    ### 💡 IDEIA 2: Vocabulário Passivo vs Ativo na Redação
+    * **Eixo Temático**: Diagnóstico Pedagógico
+    * **Curso Oficial**: Apoio Escolar — Português (Ensino Fundamental)
+    * **Palavra-chave (CTA)**: `REDACAO`
+    * **Justificativa Estratégica**: Destrava escrita e argumentação.
+    """
+    ideias = extract_ideas_from_text(texto_com_ruido)
+    assert len(ideias) == 2
+    titulos = [i["titulo"] for i in ideias]
+    assert "Portfolio Estrito" not in titulos
+    assert "Zero Menção a Personagens" not in titulos
+    assert 'A "Cultura do Rascunho" em Matemática' in titulos
+    assert "Vocabulário Passivo vs Ativo na Redação" in titulos
+    # Verifica que completou os 8 slides
+    for i in ideias:
+        assert len(i["slides_sugeridos"]) == 8
+        assert i["cta"] in ("RASCUNHO", "REDACAO")
+

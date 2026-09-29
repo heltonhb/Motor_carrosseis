@@ -89,7 +89,7 @@ SYSTEM_INSTRUCTION_PERSONA = """Você é a CAROL — Consultora de Aceleração 
 5. Prompts de geração de imagem (prompt_en) devem ser em INGLÊS
 6. A tag de navegação "Mova para o próximo ➔" deve aparecer nos slides 1 a 7 e nunca no último slide
 7. No conteúdo orgânico, sempre combine a chamada comercial com um gatilho de compartilhamento entre pais (Direct) ou comando de re-leitura ("volte ao slide X") para maximizar tempo de retenção
-8. SLIDES THUMBNAIL (1, 4 e 5): devem ser composições de foto real da unidade Tatuapé (recepção ou alunos em atividades) + texto curto de 3-8 palavras para engajar e despertar interesse — nunca banco de imagens, ilustração ou cena genérica gerada por IA
+8. SLIDES THUMBNAIL (1, 4 e 5): devem ser composições profissionais SOBRE a foto real da unidade Tatuapé (recepção ou alunos em atividades) — a foto entra como camada de fundo intacta, e o que se compõe por cima é tipografia e elementos gráficos mínimos (como um designer faria no Photoshop). Nunca banco de imagens, ilustração ou cena genérica gerada por IA
 
 ═══ KPIs QUE VOCÊ PERSEGUE ═══
 • Salvamentos ≥ 4% (eixo Didático)
@@ -100,7 +100,7 @@ SYSTEM_INSTRUCTION_PERSONA = """Você é a CAROL — Consultora de Aceleração 
 ═══ FORMATO PADRÃO DOS CARROSSÉIS ═══
 • 1080 x 1350 px (4:5 vertical) — 8 lâminas
 • Safe Zone 1:1 na Capa: títulos e elementos vitais centralizados na área 1080 x 1080 px para preservação perfeita na grade do perfil
-• THUMBNAILS COM FOTO REAL (slides 1, 4 e 5): composição de texto curto (3-8 palavras, para engajar ou despertar interesse) sobre fotos reais da unidade Tatuapé — recepção ou alunos em atividades. Essas 3 lâminas seguem a mesma receita visual: foto real + overlay de texto curto que interrompe o scroll.
+• THUMBNAILS COM FOTO REAL (slides 1, 4 e 5): composição profissional sobre a foto real da unidade Tatuapé — a foto entra como camada de fundo full-bleed, intacta. Sobre ela, overlay de texto curto (3-8 palavras) que interrompe o scroll. A foto NÃO é regenerada nem recriada — é editada/composta como um profissional faria no Photoshop.
 • Máximo 2 carrosséis/semana (Terça + Sexta)
 • Janela de 72h entre posts no feed
 • Horários: 11h30-13h00 ou 18h30-20h00
@@ -120,7 +120,7 @@ TEMPERATURAS = {
     "tendencias": 0.4,      # Análise factual — mais conservador
     "ideias": 0.7,          # Criatividade equilibrada
     "prompts_imagem": 0.7,  # Criatividade visual
-    "legendas": 0.85,       # Copy criativo e humano
+    "legendas": 0.6,        # Persuasão alinhada com fidelidade estrita ao tema
     "cronograma": 0.4,      # Planejamento factual
     "default": 0.7,
 }
@@ -193,6 +193,7 @@ Cada carrossel deve parar o scroll no feed e conduzir a leitura magnética até 
 • 2 ideias DIDÁTICAS (meta: salvamentos ≥ 4%)
 • 2 ideias COMPORTAMENTAIS (meta: envios DM ≥ 2,5%)
 • 2 ideias DIAGNÓSTICAS (meta: leads WhatsApp 15-25/semana)
+• Distribuição equilibrada entre os 4 CURSOS OFICIAIS: Apoio Escolar (Português e Matemática) e Tecnologia (Robótica e Programação).
 
 ─── 2. DIVERSIFICAÇÃO DE HOOKS ───
 ⚠️ NUNCA comece múltiplos títulos com o mesmo padrão.
@@ -205,11 +206,11 @@ Use pelo menos 4 destes tipos entre as 6 ideias:
 6. CONTRASTE ANTES x DEPOIS: Evolução clara
 
 ─── 3. ESTRUTURA DE 8 SLIDES COM RETENÇÃO MAGNÉTICA ───
-• Slide 1 (Capa/thumbnail): Composição de thumbnail com uma das fotos reais anexadas pelo usuário — recepção da unidade ou alunos em atividade — e texto curto de 3-8 palavras, desenhado para interromper o scroll e despertar interesse (perfeito na Safe Zone 1:1, legível no celular)
+• Slide 1 (Capa/thumbnail): Composição de thumbnail sobre foto real com texto curto de 3 a 7 palavras (Safe Zone 1:1 central). Fórmula obrigatória: [Sintoma Cotidiano] + [Provocação / Quebra de Expectativa]. Exemplos: "Tira 9 na prova, mas não aprendeu?", "A ilusão do rascunho em Matemática", "Por que ele trava na redação?", "Lê muito, mas não interpreta?".
 • Slide 2 (Tensão): Aprofunda a dor da família + abre open loop instigante
 • Slide 3 (Entrega): Revelação prática ou contexto que prepara a aplicação
-• Slides 4 e 5 (Thumbnails de aplicação): Repetir a receita do slide 1 — uma das fotos reais anexadas pelo usuário, da recepção da unidade ou de alunos em atividade, + composição de texto curto de 3-8 palavras, com gancho visual forte e conexão direta com o tema
-• Slide 6 (Aplicação/Ponte): Como aplicar na prática através do método individualizado da Ensina Mais (mantém entrega de valor alto, sem quebra brusca para autopromoção)
+• Slides 4 e 5 (Thumbnails de aplicação): Repetir a receita do slide 1 — foto real + texto curto de 3 a 8 palavras com gancho visual forte conectado ao método
+• Slide 6 (Aplicação/Ponte): Como aplicar na prática através do método individualizado da Ensina Mais (entrega de alto valor pedagógico, sem quebra brusca para autopromoção)
 • Slide 7 (Transformação/Prova): Caso real de aluno, superação ou depoimento acolhedor integrado à unidade física (Rua Coelho Lisboa, 783)
 • Slide 8 (CTA + Loop Orgânico): Palavra-chave + WhatsApp (11) 94475-0009 + gatilho de re-leitura ("volte ao slide X") ou envio por direct para o outro responsável
 
@@ -412,9 +413,21 @@ CLAUSULA_SEM_PERSONAGENS = "no cartoon characters"
 # "referencias" inclui "fachada": a foto de referência entra como está, o Flow
 # só compõe legenda/card por cima.
 FRASE_FACHADA = (
-    "Use the reference facade photo exactly as provided, unaltered — do not "
-    "redraw, restyle, recolor or regenerate the building; only compose the "
-    "caption, cards and text on top of it."
+    "Use the provided reference photo of the school facade exactly as-is as the "
+    "full-bleed background — do not regenerate, redraw, restyle, recolor, or "
+    "replace any part of the photograph. Compose ONLY design elements on top: "
+    "text overlays, testimonial cards, and logo badge. The photo itself is "
+    "untouched, like a professional Photoshop composite."
+)
+
+# Cláusula para slides com foto real (regras 1, 4, 5) — composição sobre foto
+# de referência, não geração de cena. A foto entra como camada fixa.
+FRASE_FOTO_REAL = (
+    "Use the provided reference photo exactly as-is as the full-bleed background "
+    "photograph — do not regenerate, redraw, restyle, or replace the scene. "
+    "Compose ONLY typographic overlays and minimal graphic elements on top of "
+    "the photograph, like a professional photo-editor would in Photoshop. The "
+    "photograph itself must remain untouched and photorealistic."
 )
 
 
@@ -595,10 +608,20 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                     f"⚠️ Slide {snum}: tipo_foto deve ser uma cena fotográfica real do catálogo "
                     f"({', '.join(CENAS_FOTO)})."
                 )
-            if not pen_low.startswith("authentic school photo"):
+            is_foto_real = (
+                FRASE_FOTO_REAL.lower() in pen_low
+                or "use the provided reference photo" in pen_low
+            )
+            if not is_foto_real:
                 avisos.append(
-                    f'⚠️ Slide {snum}: prompt_en DEVE COMEÇAR com '
-                    '"Authentic school photo of..." — foto real é obrigatória (regra 2).'
+                    f'⚠️ Slide {snum}: prompt_en sem cláusula de composição '
+                    'sobre foto de referência (FRASE_FOTO_REAL) — regra 2.'
+                )
+            # Detectar "Authentic school photo" antigo (a IA gera a foto em vez de compor)
+            if "authentic school photo" in pen_low and not is_foto_real:
+                avisos.append(
+                    f'⚠️ Slide {snum}: prompt_en contém "Authentic school photo" — '
+                    "use FRASE_FOTO_REAL para composição sobre a foto de referência, não geração de cena (regra 2)."
                 )
             # Detectar padrões proibidos que indicam layout genérico (sem foto real)
             for padrao in PADROES_PROIBIDOS_FOTO:
@@ -685,26 +708,26 @@ Estas são as ÚNICAS fotos reais da unidade que podem ser sugeridas como refer�
 Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de imagens nem cenas inventadas.
 
 ─── ESTRUTURA POR TIPO DE SLIDE (tipos canônicos iguais aos do roteiro: 1 Capa, 2 Segunda Capa, 3-5 Entrega, 6 Ponte, 7 Prova, 8 CTA — com a referência típica de cada lâmina) ───
-• SLIDE 1 (Capa / Thumbnail de abertura — FOTO REAL OBRIGATÓRIA; referência típica: "fachada" ou "recepcao_unidade"): thumbnail construída SOBRE uma foto real da unidade. A foto real é o elemento dominante do slide — ocupa a maior parte do quadro. Sobre ela, aplique texto curto de 3-8 palavras em tipografia geométrica de impacto (Azul Brand #007799, com marca-texto amarelo #FFC20E), legível no celular, centralizado na Safe Zone 1:1 (1080×1080 px) para preservação na grade do perfil. Selo do logo no rodapé. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]" — NUNCA fundo genérico, card flutuante sozinho ou cena ilustrada/gerada por IA.
+• SLIDE 1 (Capa / Thumbnail de abertura — FOTO REAL OBRIGATÓRIA; referência típica: "fachada" ou "recepcao_unidade"): composição profissional SOBRE a foto de referência da unidade (como um designer faria no Photoshop). A foto real entra como camada de fundo full-bleed, intacta e photorealistic — NÃO é regenerada nem recriada. Sobre ela, componha: texto curto de 3-8 palavras em tipografia geométrica de impacto (Azul Brand #007799, com marca-texto amarelo #FFC20E), legível no celular, centralizado na Safe Zone 1:1 (1080×1080 px). Selo do logo no rodapé. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL — NUNCA "Authentic school photo of..." nem fundo genérico/gerado por IA.
 • SLIDE 2 (Segunda Capa; referência típica: a cena de atividade que traduz o tema — ex.: "alunos_robotica" para um carrossel de robótica, "aluno_programacao" para programação, "alunos_apoio" para apoio escolar): Fundo contrastante em Azul Brand (#007799 / #0084B4), tipografia branca e amarelo vibrante, transições orgânicas em curva — funciona como capa alternativa no feed.
 • SLIDE 3 (Entrega; referência típica: a cena da disciplina do tema, ex.: "alunos_apoio", "alunos_robotica", "aluno_programacao"): Cards disciplinares flutuantes (branco puro #FFFFFF com toques pastel da disciplina: azul claro, laranja, coral ou verde lima), diagramas, passos com ícones minimalistas em círculos coloridos.
-• SLIDE 4 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
-• SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — foto real da unidade como elemento dominante + texto curto de 3-8 palavras sobreposto com gancho visual forte e conexão direta com o tema. O prompt_en DEVE começar com "Authentic school photo of [descrever a cena real]".
+• SLIDE 4 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + texto curto de 3-8 palavras compondo sobre a foto. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
+• SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + texto curto de 3-8 palavras compondo sobre a foto. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
 • SLIDE 6 (Ponte; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
-• SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Foto FIEL da fachada da Rua Coelho Lisboa, 783 + cartão de depoimento/prova social com bordas arredondadas. A foto de referência da fachada é INTOCÁVEL: entra exatamente como está — proibido redesenhar, reestilizar, recolorir, trocar o prédio ou regenerar a cena; o prompt_en DEVE conter a cláusula da regra 12 e o que se compõe por cima é só o cartão de depoimento e a legenda.
+• SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Composição profissional SOBRE a foto da fachada da Rua Coelho Lisboa, 783. A foto entra como camada de fundo full-bleed, intacta — proibido redesenhar, reestilizar, recolorir ou regenerar. Sobre ela: cartão de depoimento/prova social com bordas arredondadas + legenda. O prompt_en DEVE conter a cláusula FRASE_FACHADA.
 • SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) ("Agende uma aula experimental gratuita" / WhatsApp (11) 94475-0009), ícones minimalistas de salvar + compartilhar DM.
 
 ─── REGRAS DO PROMPT ───
 1. prompt_en em INGLÊS, text_overlay em PORTUGUÊS DO BRASIL.
-2. ⛔ SLIDES 1, 4 e 5 — FOTO REAL DA ESCOLA (REGRA PRIORITÁRIA, leia antes de qualquer outra):
-   Esses 3 slides são THUMBNAILS construídos SOBRE uma foto real da unidade. O prompt_en desses slides DEVE OBRIGATORIAMENTE:
-   (a) COMEÇAR com "Authentic school photo of [cena real: reception area / students doing robotics / etc.]" — esta é a primeira frase do prompt, sem exceção;
-   (b) Descrever a foto real como elemento dominante (ocupa a maior parte do quadro);
-   (c) Incluir o texto curto (3-8 palavras) como overlay SOBRE a foto;
+2. ⛔ SLIDES 1, 4 e 5 — COMPOSIÇÃO SOBRE FOTO REAL (REGRA PRIORITÁRIA, leia antes de qualquer outra):
+   Esses 3 slides são composições profissionais SOBRE a foto de referência da unidade (estilo Photoshop/editing). A foto real entra como camada de fundo full-bleed, intacta e photorealistic — NÃO é regenerada, recriada, reestilizada nem substituída pela IA. O prompt_en desses slides DEVE OBRIGATORIAMENTE:
+   (a) CONTER a cláusula FRASE_FOTO_REAL que instrui o modelo a usar a foto como camada fixa e compor elementos por cima;
+   (b) Descrever a composição: o que vai SOBRE a foto (texto, badge do logo, elementos gráficos mínimos);
+   (c) Incluir o texto curto (3-8 palavras) como overlay tipográfico SOBRE a foto;
    (d) Marcar "usa_foto_real": true e "tipo_foto" com UMA cena fotográfica do catálogo (ex.: "recepcao_unidade", "alunos_robotica", "aluno_programacao", "alunos_apoio") no JSON.
-   ⛔ PROIBIDO nos slides 1, 4 e 5: "soft off-white background", "floating white card", "soft background", fundo liso genérico ou cena 100% gerada por IA. Esses elementos são exclusivos dos slides 2, 3, 6, 7 e 8.
-   ✅ CORRETO (slide 1): "Authentic school photo of students working on robotics at a yellow table in a bright classroom, with bold Brand Blue #007799 text overlay in Brazilian Portuguese: 'Seu filho programa o futuro dele.' No cartoon characters."
-   ❌ ERRADO (slide 1): "Modern educational slide, soft off-white background #F7F9FF, floating white card with 24px rounded corners..."
+   ⛔ PROIBIDO nos slides 1, 4 e 5: "Authentic school photo of..." (a IA recria a cena), "soft off-white background", "floating white card", "soft background", fundo liso genérico ou cena 100% gerada por IA. Esses elementos são exclusivos dos slides 2, 3, 6, 7 e 8.
+   ✅ CORRETO (slide 1): "Use the provided reference photo exactly as-is as the full-bleed background photograph — do not regenerate, redraw, restyle, or replace the scene. Compose ONLY typographic overlays and minimal graphic elements on top of the photograph, like a professional photo-editor would in Photoshop. The photograph itself must remain untouched and photorealistic. Bold Brand Blue #007799 text overlay in Brazilian Portuguese: 'Seu filho programa o futuro dele.' No cartoon characters."
+   ❌ ERRADO (slide 1): "Authentic school photo of students working on robotics at a yellow table..." (a IA gera uma foto nova em vez de compor sobre a referência)
 3. ESTÉTICA DOS SLIDES 2, 3, 6, 7 e 8 (NÃO se aplica aos slides 1, 4 e 5 — eles usam foto real, veja regra 2). No prompt_en desses slides: descreva explicitamente a estética (modern friendly geometric sans-serif typography, centered elements respecting a 1:1 square safe zone for Instagram grid preview, floating white cards with 16-24px rounded corners, subtle diffuse shadows, soft off-white background #F7F9FF, Brand Blue #007799 headers, Action Green #58B947 pill buttons for CTAs, vibrant yellow/orange #FFC20E highlights, pastel cards, organic curve transitions, minimalist line icons in colored circles).
 4. text_overlay: máximo 15 palavras, fonte bold, legível em celular.
 5. No prompt_en, inclua EXATAMENTE UMA vez, copiada sem paráfrase: "text overlay in Brazilian Portuguese: [TEXTO]" — nunca troque o início por "highlight/overlay ... in Brazilian Portuguese" e nunca repita a instrução de texto sobreposto na mesma lâmina (uma única vez, sempre com o mesmo texto de text_overlay).
@@ -756,11 +779,12 @@ Retorne JSON:
 
 # ─── Exportação da série para o Google Flow ─────────────────────────────────
 DICAS_SERIE_FLOW = """Como gerar as 8 lâminas no Google Flow:
-1. Gere primeiro o SLIDE 1: cole o prompt dele e anexe as fotos de referência indicadas.
+1. Gere primeiro o SLIDE 1: cole o prompt dele e anexe as fotos de referência indicadas. O Flow vai compor os elementos de design SOBRE a foto — a foto entra como camada fixa.
 2. Nos slides 2 a 8, anexe também a imagem gerada do slide 1 junto com as referências daquela lâmina — é ela que mantém estilo, tipografia e paleta coesos no carrossel.
 3. Use só as fotos do catálogo (refs/) como referência — nada de banco de imagens.
 4. Confira o canto inferior direito: a tag "Mova para o próximo ➔" aparece nos slides 1 a 7 e fica fora do slide 8.
-5. O app não gera imagem: baixe cada lâmina em 1080x1350 px (4:5) e monte o carrossel na ordem 1→8."""
+5. O app não gera imagem: baixe cada lâmina em 1080x1350 px (4:5) e monte o carrossel na ordem 1→8.
+6. slides 1, 4 e 5: a foto de referência é a camada de fundo — o Flow compõe tipografia e elementos gráficos por cima, como um editor profissional faria."""
 
 
 def formatar_txt_prompts(dados: dict) -> str:
@@ -785,19 +809,27 @@ def formatar_txt_prompts(dados: dict) -> str:
 # ─── Legendas com Copywriting Estruturado ────────────────────────────────────
 PROMPT_LEGENDAS = """Com base no carrossel abaixo, escreva 3 OPÇÕES DE LEGENDA DE ALTO IMPACTO para o Instagram.
 
+─── ⚠️ REGRA CRÍTICA DE COERÊNCIA TEMÁTICA (FIDELIDADE ABSOLUTA AO CARROSSEL) ───
+• A legenda DEVE tratar EXCLUSIVAMENTE do curso, tema e conteúdo das lâminas do carrossel fornecido.
+• Se o carrossel for de Matemática/Apoio Escolar, aborde exclusivamente dificuldades de matemática, raciocínio lógico, interpretação de enunciados e provas escolares. É TERMINANTEMENTE PROIBIDO falar de robótica, programação ou tempo de telas se o carrossel for de apoio escolar.
+• Se o carrossel for de Língua Portuguesa/Apoio Escolar, aborde interpretação de texto, gramática, ortografia ou redação escolar.
+• Se o carrossel for de Tecnologia (Robótica/Programação), aborde raciocínio computacional, robótica e habilidades do futuro.
+• Use OBRIGATORIAMENTE a palavra-chave de CTA especificada no campo "cta" do carrossel (ex.: se o CTA for "MEDIDAS", comente "MEDIDAS"; se for "DESAFIO", comente "DESAFIO"). NUNCA substitua por outra palavra como "FUTURO".
+• O gancho de abertura e a agitação da dor DEVEM derivar diretamente da mensagem central da Capa e dos slides do roteiro.
+
 ─── AS 3 TÉCNICAS (UMA POR OPÇÃO) ───
-• OPÇÃO 1 — PAS (Problem → Agitation → Solution): Abre com a dor nua da rotina familiar. Agita mostrando o custo de não resolver. Fecha com a solução da unidade.
-• OPÇÃO 2 — STORYTELLING (Antes → Virada → Resultado): Cena vívida cotidiana no Tatuapé/Anália Franco. Conflito com empatia real. Transformação quando a escola assume o papel técnico.
-• OPÇÃO 3 — CURIOSITY GAP (Dado Inesperado → Método → Ação): Afirmação surpreendente sobre aprendizagem e notas. Valor imediato. Convite para diagnóstico.
+• OPÇÃO 1 — PAS (Problem → Agitation → Solution): Abre com a dor nua da rotina familiar ligada ao tema específico do carrossel. Agita mostrando o custo de não resolver no colégio. Fecha com a solução da Ensina Mais Tatuapé.
+• OPÇÃO 2 — STORYTELLING (Antes → Virada → Resultado): Cena vívida cotidiana no Tatuapé/Anália Franco conectada ao tema do carrossel. Conflito com empatia real. Transformação quando a escola assume o papel técnico.
+• OPÇÃO 3 — CURIOSITY GAP (Dado Inesperado → Método → Ação): Afirmação surpreendente ou contraintuitiva sobre a disciplina e notas do carrossel. Valor imediato. Convite para diagnóstico.
 
 ─── FORMATO ───
-1. Gancho (primeira linha): Máx 8-12 palavras (até 85 caracteres antes do corte do '... mais'). NUNCA 'Você sabia que...'. Deve quebrar padrão, intrigar ou abrir um loop para forçar o clique em 'ver mais'.
-2. Parágrafos curtos (2-3 linhas) com espaçamento limpo para celular
-3. Emojis apenas como marcadores funcionais (📌 💡 🎯 🚀)
-4. SEO local: mencionar 'Tatuapé', 'Anália Franco' ou 'apoio escolar' naturalmente
+1. Gancho (primeiras 2 linhas): Máximo 125 caracteres antes do corte do '... mais' no feed mobile. NUNCA comece com saudações mornas ('Olá pais', 'Mães do Tatuapé') nem com 'Você sabia que...'. A abertura DEVE ser uma quebra de padrão ou micro-cena sensorial complementar à capa que instiga o clique em 'ver mais' (ex: "Você já viu seu filho apagar a mesma conta até furar a folha de prova?").
+2. Escaneabilidade mobile: Parágrafos curtos de 1 a 2 frases com linhas em branco entre eles para leitura ágil no celular
+3. Emojis com parcimônia apenas como marcadores visuais funcionais (📌 💡 🎯 🚀)
+4. SEO local: mencionar 'Tatuapé', 'Jardim Anália Franco' ou 'apoio escolar' de forma 100% orgânica
 5. CTA DUPLO OBRIGATÓRIO:
-   • Conversão: palavra-chave do carrossel + WhatsApp (11) 94475-0009
-   • Alavanca Orgânica: incentivo a compartilhar por Direct ('Envie para quem divide a lição de casa com você') ou salvar para consultar nas provas
+   • Conversão: palavra-chave EXATA do carrossel nos comentários + WhatsApp (11) 94475-0009
+   • Alavanca Orgânica: incentivo a compartilhar por Direct ('Envie para quem divide a rotina de estudos com você') ou salvar para consultar nas provas
 6. Extensão: 800-1.400 caracteres
 7. Hashtags: 5-7 focadas (#EnsinaMaisTatuapé #ApoioEscolarTatuapé #ReforçoEscolarTatuapé #MãesDoTatuapé #AnáliaFranco #EducaçãoTatuapé)
 

@@ -1,7 +1,7 @@
 """Testes do validador de prompts de imagem (validate_prompts)."""
 
 from config import TAG_NAVEGACAO
-from prompts import FRASE_FACHADA, validate_prompts
+from prompts import FRASE_FACHADA, FRASE_FOTO_REAL, validate_prompts
 
 _TIPOS_THUMB = {1: "recepcao_unidade", 4: "alunos_robotica", 5: "aluno_programacao"}
 
@@ -17,11 +17,10 @@ def _tag_frase(n: int) -> str:
 
 def _slide(n: int, overlay: str, prompt_en: str | None = None) -> dict:
     if prompt_en is None:
-        corpo = (
-            f"Authentic school photo of students at Ensina Mais Tatuapé, slide {n}"
-            if n in _TIPOS_THUMB
-            else f"Modern educational slide {n} with cards and line icons"
-        )
+        if n in _TIPOS_THUMB:
+            corpo = f"{FRASE_FOTO_REAL} The scene depicts: students at Ensina Mais Tatuapé, slide {n}"
+        else:
+            corpo = f"Modern educational slide {n} with cards and line icons"
         fachada = f"{FRASE_FACHADA} " if n == 7 else ""
         prompt_en = (
             f"{corpo}. {fachada}text overlay in Brazilian Portuguese: '{overlay}'. "

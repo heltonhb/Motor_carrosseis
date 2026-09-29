@@ -11,6 +11,7 @@ import time
 import streamlit as st
 
 # Catálogo oficial de cursos da Ensina Mais Tatuapé. Todo conteúdo DEVE orbitar
+MAX_PROMPT_CHARS = 3000  # limite seguro para evitar rejeição do servidor
 # um desses cursos — nunca invente ou generalize para algo fora do portfólio.
 _CURSOS_ENSAINA_MAIS = [
     "Apoio Escolar — Português (Ensino Fundamental)",
@@ -133,6 +134,19 @@ def _motivo_falha(code: int, stderr: str, timeout: int) -> str:
 
 def _limpar_resposta(text: str) -> str:
     """Remove os ruídos do CLI (cabeçalho/rodapé de conversa) da resposta."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+
+    # Se o CLI retornou JSON (modo --json), desempacota o campo 'answer'
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict) and "answer" in data:
+                text = str(data["answer"]).strip()
+        except Exception:
+            pass
+
     text = re.sub(
         r"^(?:Continuing|Resumed) conversation [0-9a-f-]+\.\.\.\s*",
         "",
@@ -224,6 +238,11 @@ def ask_notebook(
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", delete=False, encoding="utf-8"
     ) as f:
+        # Limitar tamanho do prompt para evitar rejeição do servidor
+        if len(prompt) > MAX_PROMPT_CHARS:
+            if len(prompt) > MAX_PROMPT_CHARS:
+                if len(prompt) > MAX_PROMPT_CHARS:
+                    prompt = prompt[:MAX_PROMPT_CHARS] + "\n\n[PROMPT TRUNCADO POR TAMANHO EXCESSIVO]"
         f.write(prompt)
         prompt_file = f.name
 
@@ -235,6 +254,7 @@ def ask_notebook(
         cmd = _nlm_cmd(
             "ask",
             "--new", "-y",
+            "--json",
             "--prompt-file", prompt_file,
             profile=profile,
         )
@@ -254,8 +274,6 @@ def ask_notebook(
         # Remove arquivo temporário
         if os.path.exists(prompt_file):
             os.remove(prompt_file)
-
-
 def ask_notebook_streaming(
     notebook_id: str,
     prompt: str,
@@ -282,6 +300,9 @@ def ask_notebook_streaming(
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".txt", delete=False, encoding="utf-8"
     ) as f:
+        # Limitar tamanho do prompt para evitar rejeição do servidor
+        if len(prompt) > MAX_PROMPT_CHARS:
+            prompt = prompt[:MAX_PROMPT_CHARS] + "\n\n[PROMPT TRUNCADO POR TAMANHO EXCESSIVO]"
         f.write(prompt)
         prompt_file = f.name
 
@@ -292,6 +313,7 @@ def ask_notebook_streaming(
         cmd = _nlm_cmd(
             "ask",
             "--new", "-y",
+            "--json",
             "--prompt-file", prompt_file,
             profile=profile,
         )
@@ -337,10 +359,6 @@ def ask_notebook_streaming(
     finally:
         if os.path.exists(prompt_file):
             os.remove(prompt_file)
-
-
-# ─── Prompt Builders (reutilizáveis por sync e streaming) ─────────────────────
-
 def _build_search_prompt(query: str) -> str:
     """Prompt para busca livre no notebook."""
     return _PERSONA_PREFIX + f"""Baseado nas fontes deste notebook, responda sobre: {query}
@@ -382,13 +400,14 @@ Retorne um JSON com esta estrutura:
 }}"""
 
 
-def _carregar_ideias_historico(limit: int = 30) -> list[str]:
+def _carregar_ideias_historico(limit: int = 12) -> list[str]:
     """
     Lê as gerações anteriores ('ideias') de data/historico_geracoes.json e
-    retorna uma lista de temas/títulos já usados, para o prompt evitar repeti-los.
+    retorna uma lista concisa dos temas/títulos recentes já usados (máx 12).
     """
     import json as _json
     from pathlib import Path as _Path
+    from parser_nlm import is_guideline_noise
 
     path = _Path(__file__).resolve().parent / "data" / "historico_geracoes.json"
     excl = []
@@ -401,7 +420,13 @@ def _carregar_ideias_historico(limit: int = 30) -> list[str]:
     if not isinstance(registros, list):
         return excl
 
-    for reg in registros:
+    termos_ignorar = {
+        "portfolio estrito", "zero menção", "zero mencao", "ineditismo total",
+        "ancoragem local", "call to action direto", "do carrossel", "```json",
+        "ideias", "titulo", "eixo", "tema", "slides_sugeridos", "publico_alvo"
+    }
+
+    for reg in reversed(registros):
         if not isinstance(reg, dict) or reg.get("tipo") != "ideias":
             continue
         dados = reg.get("dados") or {}
@@ -410,10 +435,17 @@ def _carregar_ideias_historico(limit: int = 30) -> list[str]:
                 continue
             tema = (idea.get("tema") or "").strip()
             titulo = (idea.get("titulo") or "").strip()
-            item = f"- {tema}" if tema else (f"- {titulo}" if titulo else "")
+            item_raw = tema or titulo
+            if not item_raw or len(item_raw) < 6:
+                continue
+            if is_guideline_noise(item_raw) or any(t in item_raw.lower() for t in termos_ignorar) or any(c in item_raw for c in "{}[]`"):
+                continue
+            item = f"- {item_raw}"
             if item and item not in excl:
                 excl.append(item)
-    return excl[:limit]
+                if len(excl) >= limit:
+                    return excl
+    return excl
 
 
 def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str:
@@ -435,7 +467,7 @@ def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str
 
     if exclusions:
         bloco_excl = (
-            "\n\n**TEMAS JÁ UTILIZADOS — NÃO REPITA NENHUM (nem a ideia, nem tema equivalente):\n"
+            "\n\n**TEMAS JÁ UTILIZADOS RECENTEMENTE — NÃO REPITA NENHUM (nem tema equivalente):\n"
             + "\n".join(exclusions)
             + "\n"
         )
@@ -452,20 +484,30 @@ def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str
         "Com base nas fontes deste notebook{context}{bloco_excl}{bloco_cursos}\n\n"
         "Gere 6 IDEIAS DE CARROSSEL para o Instagram da Ensina Mais Tatuapé.\n"
         "WhatsApp oficial da unidade: (11) 94475-0009\n\n"
+        "⚠️ REGRA CRÍTICA DE ENTREGA:\n"
+        "- NÃO inclua preâmbulo, cumprimentos, nem resumos de diretrizes ou checklists metodológicos (NUNCA liste tópicos como 'Portfolio Estrito', 'Zero Menção a Personagens', 'Ineditismo Total', 'Ancoragem Local', etc.).\n"
+        "- NÃO explique regras nem justifique como seguiu as premissas: entregue DIRETAMENTE as 6 ideias de carrossel prontas e completas.\n\n"
         "**Requisitos de diversidade (OBRIGATÓRIOS):\n"
-        "0. **TODO conteúdo deve orbitar os cursos oficiais listados acima** — cada ideia precisa estar ligada a pelo menos um deles (Português, Matemática, Robótica ou Programação). Não crie temas fora do portfólio de cursos. Distribua as 6 ideias entre os 4 cursos.\n"
+        "0. **TODO conteúdo deve orbitar os cursos oficiais listados acima** — cada ideia precisa estar ligada a pelo menos um deles (Português, Matemática, Robótica ou Programação). Distribua as 6 ideias de forma equilibrada entre os 4 cursos.\n"
         "1. Distribua as ideias entre os eixos: exatamente 2 Didático (foco em salvamentos), 2 Comportamental (foco em envios DM) e 2 Diagnóstico (foco em leads WhatsApp).\n"
         "2. Cada ideia deve ter um **tipo de hook** diferente entre: pergunta provocativa, dado surpreendente, depoimento breve, desafio, curiosidade estatística, promessa de resultado rápido.\n"
         "3. O **CTA** (call‑to‑action) de cada ideia deve usar uma palavra‑chave de comentário única (ex.: DESAFIO, TRANSFORMA, VERDADE, MUDANÇA, RESULTADO, AJUDA) e, obrigatoriamente, incluir o WhatsApp oficial: (11) 94475-0009.\n"
         "4. Evite iniciar mais de uma ideia com a mesma estrutura frase‑de‑abertura (não repita “Imagine que…”, “Você sabia que…”, “E se…”, etc.).\n"
-        "5. Variegue o **tom**: algumas ideias podem ser motivacionais, outras informativas, outras urgentes ou empáticas, mas mantenha sempre linguagem adequada para pais de classes A/B do Tatuapé.\n"
-        "6. Cada ideia deve trazer um **tema específico** que não seja sinônimo ou parafrase de outro tema da lista. Se um tema da lista de 'TEMAS JÁ UTILIZADOS' for parecido, escolha outro ângulo.\n"
-        "7. Nos slides sugeridos (8 slides), use os tipos canônicos do carrossel na estrutura fixa: 1 Capa, 2 Segunda Capa, 3-5 Entrega, 6 Ponte, 7 Prova, 8 CTA. A variação de uma ideia para outra está no CONTEÚDO de cada lâmina, nunca na sequência de tipos.\n\n"
+        "5. Variegue o **tom**: algumas ideias motivacionais, outras informativas, outras urgentes ou empáticas, sempre com linguagem para pais de classes A/B do Tatuapé.\n"
+        "6. Cada ideia deve trazer um **tema específico** que explore um ângulo novo não coberto na lista de temas recentes.\n"
+        "7. Nos slides sugeridos (8 slides), use a estrutura fixa:\n"
+        "   - Slide 1 (Capa): Título curto de 3 a 7 palavras (Safe Zone 1:1) pela fórmula [Sintoma Cotidiano] + [Quebra de Expectativa] (Ex: 'Tira 9 na prova, mas não aprendeu?', 'A ilusão do rascunho em Matemática', 'Por que ele trava na redação?').\n"
+        "   - Slide 2: Tensão e dor da família (30-50 palavras).\n"
+        "   - Slide 3: Entrega prática ou contexto pedagógico (30-50 palavras).\n"
+        "   - Slides 4 e 5: Thumbnails de aplicação prática (texto curto de 3 a 8 palavras).\n"
+        "   - Slide 6: Ponte para a metodologia individualizada Ensina Mais (30-50 palavras).\n"
+        "   - Slide 7: Caso real / transformação / prova (30-50 palavras).\n"
+        "   - Slide 8 (CTA): Chamada com palavra-chave + WhatsApp (11) 94475-0009.\n\n"
         "**Estrutura de saída (JSON rígido):\n"
         "{\n"
         "  \"ideias\": [\n"
         "    {\n"
-        "      \"titulo\": \"... (máx 60 caracteres)\","
+        "      \"titulo\": \"... (máx 60 caracteres, direto e magnético)\","
         "      \"curso\": \"Um dos 4 cursos oficiais (Português / Matemática / Robótica / Programação)\","
         "      \"eixo\": \"Didático/Comportamental/Diagnóstico\","
         "      \"tipo_hook\": \"pergunta provocativa / dado surpreendente / depoimento breve / desafio / curiosidade estatística / promessa de resultado rápido\","
@@ -473,7 +515,7 @@ def _build_ideas_prompt(trends: str = "", exclusions: list | None = None) -> str
         "      \"publico_alvo\": \"Pais de classes A/B do Tatuapé\","
         "      \"cta\": \"PALAVRA_CHAVE\","
         "      \"slides_sugeridos\": [\n"
-        "        {\"slide\": 1, \"tipo\": \"Capa\", \"texto\": \"... (30‑50 palavras)\"},\n"
+        "        {\"slide\": 1, \"tipo\": \"Capa\", \"texto\": \"... (3-7 palavras)\"},\n"
         "        ...\n"
         "        {\"slide\": 8, \"tipo\": \"CTA\", \"texto\": \"Comente \\\"PALAVRA_CHAVE\\\" ou fale no WhatsApp (11) 94475-0009 para agendar uma avaliação gratuita.\"}\n"
         "      ],\n"
