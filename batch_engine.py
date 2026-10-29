@@ -15,19 +15,24 @@ Cada função devolve o resultado cru; a UI decide como exibir/persistir.
 import json
 import logging
 import re
+from difflib import SequenceMatcher
 
+from acervo import bloco_dna
 from config import FLOW_FOTOS, TAG_NAVEGACAO
 from gemini import call_gemini_json, invalidate_cache
 from image_utils import generate_all_slides
 from prompts import (
+    CLAUSULA_SEM_PERSONAGENS,
     FRASE_FACHADA,
     FRASE_FOTO_REAL,
     PADROES_PROIBIDOS_FOTO,
-    PROMPT_LEGENDAS,
     PROMPT_PROMPTS_IMAGEM,
     TEMPERATURAS,
+    bloco_fidelidade,
     get_prompt_cronograma,
+    get_prompt_legendas,
     personagens_no_texto,
+    resolver_fidelidade,
     validate_prompts,
 )
 from refs_catalog import CENAS_FOTO, anexos_gemini, cena_valida, desc_en
@@ -100,6 +105,145 @@ _RE_CLAUSULA_OVERLAY = re.compile(
 )
 
 
+# Palavras funcionais: não carregam instrução nenhuma, então saem antes da
+# comparação — "do", "any", "the" fazem duas frases iguais parecerem diferentes.
+_PALAVRAS_VAZIAS = {
+    "a", "o", "as", "os", "the", "of", "in", "on", "to", "is", "are", "and",
+    "or", "do", "not", "no", "any", "its", "it", "only", "plus", "que", "com",
+}
+
+
+def _normalizar_frase(frase: str) -> list[str]:
+    """Reduz a frase aos tokens que carregam instrução, na ordem em que aparecem."""
+    tokens = re.sub(r"[^a-z0-9 ]+", " ", frase.lower()).split()
+    return [t for t in tokens if t not in _PALAVRAS_VAZIAS]
+
+
+# Todas as cláusulas que o motor escreve por conta própria. São elas que têm
+# prioridade na dedup: onde houver paráfrase do modelo fazendo o mesmo trabalho,
+# sobra a do motor — é a que o validador exige na íntegra.
+_CLAUSULAS_DO_MOTOR = (FRASE_FACHADA, FRASE_FOTO_REAL, CLAUSULA_SEM_PERSONAGENS)
+
+
+def _proteger_blocos(texto: str, blocos: tuple[str, ...]) -> tuple[str, list[tuple[str, str]]]:
+    """
+    Troca blocos inteiros (como a cláusula da fachada, que são três frases) por
+    marcadores antes da comparação frase a frase.
+
+    Sem isso, a cláusula canônica é partida em três pedaços e perde o direito de
+    sobreviver: a dedup acabaria trocando a regra escrita pelo motor pela
+    paráfrase do modelo — que o validador depois reprova.
+    """
+    protegidos: list[tuple[str, str]] = []
+    for indice, bloco in enumerate(blocos or ()):
+        # Só clause que é frase completa pode ser protegida como bloco. Um
+        # fragmento curto ("no cartoon characters") viraria marcador no meio da
+        # frase e a dedup passaria a descartar o resto dela — apagando a própria
+        # cláusula do motor.
+        if not bloco or not bloco.rstrip().endswith("."):
+            continue
+        marcador = f"@@BLOCO{indice}@@"
+        alvo = bloco.lower()
+        busca = texto.lower()
+        while alvo in busca:
+            pos = busca.find(alvo)
+            texto = texto[:pos] + marcador + texto[pos + len(bloco) :]
+            protegidos.append((marcador, bloco))
+            busca = texto.lower()
+    return texto, protegidos
+
+
+def _dedup_frases(
+    prompt_en: str,
+    similaridade: float = 0.5,
+    preferidos: tuple[str, ...] = (),
+) -> tuple[str, list[str]]:
+    """
+    Remove frases que repetem, com outras palavras, o que já foi dito.
+
+    A regra 12 anexa a cláusula canônica da foto intocável, e a checagem por
+    substring não pega quando o Gemini devolve a mesma instrução *parafraseada*.
+    O slide 7 saía com o parágrafo inteiro duplicado — duas instruções quase
+    iguais para o gerador de imagem obedecer.
+
+    `preferidos` marca as frases escritas pelo motor: quando duas quase iguais
+    batem, sobrevive a do motor, não a do modelo. O validador exige a cláusula
+    canônica na íntegra, e trocar o texto dela por paráfrase do modelo é
+    exatamente o tipo de "quase certo" que quebra mais adiante.
+    """
+    texto, protegidos = _proteger_blocos(prompt_en, preferidos)
+    # Só as cláusulas que ESTÃO no prompt podem capturar uma paráfrase. Sem
+    # esta distinção, a dedup apagava a instrução do modelo de um slide que nem
+    # tinha a cláusula do motor — e o slide ficava sem regra nenhuma.
+    presentes = [bloco for _, bloco in protegidos]
+    # Compara com o bloco inteiro e também com cada frase dele: a paráfrase do
+    # modelo costuma ser só UM dos pedidos do bloco ("Compose ONLY design
+    # elements..."), e a similaridade com o bloco inteiro fica baixa.
+    chaves_blocos: list[list[str]] = []
+    for bloco in presentes:
+        if not bloco:
+            continue
+        chaves_blocos.append(_normalizar_frase(bloco))
+        for frase in re.split(r"(?<=[.!?])\s+", bloco):
+            chave_frase = _normalizar_frase(frase)
+            if chave_frase:
+                chaves_blocos.append(chave_frase)
+    partes = re.split(r"(?<=[.!?])\s+", texto)
+    mantidas: list[str] = []
+    normalizadas: list[list[str]] = []
+    removidas: list[str] = []
+
+    for parte in partes:
+        limpa = parte.strip()
+        if not limpa:
+            continue
+        chave = _normalizar_frase(limpa)
+        if not chave:
+            mantidas.append(limpa)
+            continue
+
+        similar_indice = None
+        for indice, outra in enumerate(normalizadas):
+            if SequenceMatcher(None, chave, outra).ratio() >= similaridade:
+                similar_indice = indice
+                break
+
+        # Uma frase que cobre o mesmo terreno de um bloco protegido é a
+        # paráfrase do modelo daquela regra: sai, porque o bloco já está no
+        # prompt inteiro e na palavra do motor.
+        if any(
+            SequenceMatcher(None, chave, bloco).ratio() >= similaridade
+            for bloco in chaves_blocos
+            if bloco
+        ):
+            removidas.append(limpa[:60])
+            continue
+
+        if similar_indice is None:
+            mantidas.append(limpa)
+            normalizadas.append(chave)
+            continue
+
+        eh_preferida = any(m.lower() in limpa.lower() for m in preferidos)
+        if eh_preferida:
+            # A nova é a do motor: derruba a anterior (a paráfrase do modelo).
+            mantidas.pop(similar_indice)
+            normalizadas.pop(similar_indice)
+            removidas.append(mantidas.pop(similar_indice)[:60] if False else "")
+            mantidas.append(limpa)
+            normalizadas.append(chave)
+            removidas = [r for r in removidas if r]
+        else:
+            removidas.append(limpa[:60])
+
+    if not removidas:
+        return prompt_en, []
+    saida = " ".join(mantidas)
+    for marcador, bloco in protegidos:
+        saida = saida.replace(marcador, bloco)
+    return saida, removidas
+
+
 def _anexar_antes_da_tag(prompt_en: str, frase: str) -> str:
     """Anexa `frase` antes da frase da tag — a tag fecha o prompt (regra 6)."""
     if frase.lower() in prompt_en.lower():
@@ -156,6 +300,53 @@ def _sem_personagens_frases(texto: str) -> str:
     return " ".join(sobras)
 
 
+# Limites de palavras do texto sobreposto (config/padroesVisuais.txt: 15 no
+# roteiro curto, 3 a 8 nas thumbnails de abertura). Texto que não cabe no celular
+# não é lido, e texto ilegível é pior que texto curto.
+MAX_PALAVRAS_OVERLAY = 15
+MAX_PALAVRAS_THUMB = 8
+_SLIDES_THUMB = {1, 4, 5}
+
+
+def _limite_overlay(slide_num: int | None) -> int:
+    """Limite de palavras do overlay: thumbnail é mais apertado que lâmina comum."""
+    return MAX_PALAVRAS_THUMB if slide_num in _SLIDES_THUMB else MAX_PALAVRAS_OVERLAY
+
+
+def _cortar_overlay(texto: str, limite: int) -> tuple[str, bool]:
+    """
+    Encurta o overlay para caber no limite, preferindo frase inteira.
+
+    Cortar no meio da frase deixa o slide com ideia pela metade, que é pior do
+    que uma frase a menos. Então: primeiro tenta fechar em frase completa; se
+    nem a primeira cabe, corta por palavra e marca com reticências.
+    """
+    limpo = (texto or "").strip()
+    if not limpo:
+        return limpo, False
+    if len(limpo.split()) <= limite:
+        return limpo, False
+
+    frases = [f.strip() for f in re.split(r"(?<=[.!?])\s+", limpo) if f.strip()]
+    acumuladas: list[str] = []
+    for frase in frases:
+        tentativa = " ".join(acumuladas + [frase])
+        if len(tentativa.split()) > limite:
+            break
+        acumuladas.append(frase)
+    if acumuladas:
+        return " ".join(acumuladas), True
+
+    # Nenhuma frase cabe inteira: recua até a última vírgula dentro do limite.
+    # "a criança associa o erro a…" lê como falha de escrita; "quando a nota
+    # baixa é recebida como falha pessoal, a…" lê como corte de frase.
+    palavras = limpo.split()[:limite]
+    for corte in range(len(palavras), 1, -1):
+        if palavras[corte - 1].endswith((",", ";", ":", "—", "-")):
+            return " ".join(palavras[:corte]).strip(), True
+    return " ".join(palavras).rstrip(",;:") + "…", True
+
+
 def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
     """Garante as regras 5, 6, 7 e 12 em TODO slide, seja qual for a origem.
 
@@ -175,6 +366,16 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
     antes = prompt_en
     msgs: list[str] = []
 
+    # Repetição vem antes das demais regras: anexar a cláusula canônica a um
+    # prompt que já diz a mesma coisa (com outras palavras) é o que cria o
+    # duplicado. Deduplica primeiro, depois garante.
+    prompt_en, duplicadas = _dedup_frases(prompt_en, preferidos=_CLAUSULAS_DO_MOTOR)
+    if duplicadas:
+        msgs.append(
+            f"slide {snum}: {len(duplicadas)} instrução(ões) repetida(s) removida(s) "
+            "— duas versões quase iguais da mesma regra confundem a geração"
+        )
+
     # Regra 5 — exatamente UMA cláusula, texto canônico = text_overlay
     matches = list(_RE_CLAUSULA_OVERLAY.finditer(prompt_en))
     if matches and not overlay:
@@ -189,6 +390,21 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
             "uma por lâmina (regra 5)"
         )
         matches = list(_RE_CLAUSULA_OVERLAY.finditer(prompt_en))
+
+    # Regra 4 — o overlay cabe no limite. A validação só avisa; aqui o motor
+    # encurta, porque um texto que não cabe não é choice do usuário, é falha de
+    # escrita gerada. O corte aparece na lista de correções, nunca em silêncio.
+    if overlay:
+        limite = _limite_overlay(snum)
+        overlay_curto, cortado = _cortar_overlay(overlay, limite)
+        if cortado:
+            antes_overlay = overlay
+            overlay = overlay_curto
+            slide["text_overlay"] = overlay
+            msgs.append(
+                f"slide {snum}: text_overlay encurtado de {len(antes_overlay.split())} "
+                f"para {len(overlay.split())} palavras (limite {limite}, regra 4)"
+            )
 
     idx_tag = prompt_en.lower().find(_FRASE_TAG.lower())
     if matches and snum != 8 and idx_tag != -1 and matches[0].start() > idx_tag:
@@ -245,6 +461,17 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
     else:
         prompt_en = _anexar(prompt_en, _FRASE_TAG)
         slide["tag_navegacao"] = TAG_NAVEGACAO
+
+    # Segunda passada de dedup, depois de todas as cláusulas anexadas. A regra 12
+    # anexa a cláusula canônica da foto intocável; se o Gemini já tinha dito a
+    # mesma coisa com outras palavras, a checagem por substring não pega e o
+    # slide termina com o parágrafo repetido.
+    prompt_en, duplicadas_fim = _dedup_frases(prompt_en, preferidos=_CLAUSULAS_DO_MOTOR)
+    if duplicadas_fim:
+        msgs.append(
+            f"slide {snum}: {len(duplicadas_fim)} instrução(ões) repetida(s) removida(s) "
+            "após as regras automáticas"
+        )
 
     # prompt_pt nunca fica vazio quando existe overlay
     if overlay and not (slide.get("prompt_pt") or "").strip():
@@ -439,6 +666,7 @@ def gerar_prompts_ideia(
     forcar: bool = False,
     avisos: list | None = None,
     corrigidos: list | None = None,
+    fidelidade: str | None = None,
 ) -> dict | None:
     """Gera prompts de imagem para UMA ideia. Retorna dict ou None.
 
@@ -452,15 +680,29 @@ def gerar_prompts_ideia(
 
     Com FLOW_FOTOS=true as fotos do catálogo (refs/) são anexadas ao Gemini;
     no padrão (false) a geração é só texto.
+
+    `fidelidade` (baixa/media/alta) diz ao modelo o que fazer com a referência.
+    Alta degrada para média quando não há imagem anexada, e o aviso vai para
+    `avisos` — o usuário precisa saber que pediu uma coisa e recebeu outra.
     """
     ctx = _ctx_ideia(ideia)
     imagens = anexos_gemini() if FLOW_FOTOS else None
     if imagens:
         logger.info("FLOW_FOTOS ativo: anexando %d fotos do catálogo", len(imagens))
+    nivel_fid, avisos_fid = resolver_fidelidade(fidelidade, tem_imagem=bool(imagens))
+    prompt = (
+        PROMPT_PROMPTS_IMAGEM
+        + bloco_fidelidade(nivel_fid, tem_imagem=bool(imagens))
+        + bloco_dna()
+    )
+    if avisos is not None:
+        avisos.extend(avisos_fid)
+    for aviso in avisos_fid:
+        logger.info("Fidelidade ajustada: %s", aviso)
     if forcar:
-        invalidate_cache(PROMPT_PROMPTS_IMAGEM, ctx, images=imagens)
+        invalidate_cache(prompt, ctx, images=imagens)
     dados = call_gemini_json(
-        PROMPT_PROMPTS_IMAGEM,
+        prompt,
         ctx,
         temperature=TEMPERATURAS["prompts_imagem"],
         images=imagens,
@@ -478,12 +720,17 @@ def gerar_prompts_ideia(
     return dados
 
 
-def gerar_legendas_ideia(ideia: dict, forcar: bool = False) -> dict | None:
-    """Gera 3 opções de legenda para UMA ideia. Retorna dict ou None."""
+def gerar_legendas_ideia(ideia: dict, forcar: bool = False, tom: str | None = None) -> dict | None:
+    """Gera 3 opções de legenda para UMA ideia. Retorna dict ou None.
+
+    O tom entra no prompt, não na temperatura: registro é instrução, não
+    temperatura. Sem tom informado, o eixo da própria ideia decide.
+    """
     ctx = _ctx_ideia(ideia)
+    prompt = get_prompt_legendas(tom, ideia.get("eixo"))
     if forcar:
-        invalidate_cache(PROMPT_LEGENDAS, ctx)
-    return call_gemini_json(PROMPT_LEGENDAS, ctx, temperature=TEMPERATURAS["legendas"])
+        invalidate_cache(prompt, ctx)
+    return call_gemini_json(prompt, ctx, temperature=TEMPERATURAS["legendas"])
 
 
 def gerar_cronograma(ideias: list, forcar: bool = False) -> dict | None:
@@ -508,6 +755,7 @@ def processar_lote(
     fazer_cronograma: bool = True,
     forcar: bool = False,
     on_progress=None,
+    fidelidade: str | None = None,
 ) -> dict:
     """
     Orquestra o processamento de N ideias.
@@ -533,7 +781,9 @@ def processar_lote(
         if fazer_prompts:
             avisos: list = []
             corrigidos: list = []
-            dados = gerar_prompts_ideia(ideia, forcar=forcar, avisos=avisos, corrigidos=corrigidos)
+            dados = gerar_prompts_ideia(
+                ideia, forcar=forcar, avisos=avisos, corrigidos=corrigidos, fidelidade=fidelidade
+            )
             if dados:
                 results[f"prompts_{idx}"] = {
                     "titulo": titulo,

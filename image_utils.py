@@ -258,13 +258,25 @@ def add_text_overlay(
 
 # ─── Geração de slide a partir de template ────────────────────────────────────
 
+
+def _fundo_e_claro(img: Image.Image) -> bool:
+    """
+    Diz se a base do slide é clara (luminância média alta).
+
+    Amostra a faixa central em três pontos: o topo do slide pode ter a barra de
+    acento colorida e não representar o fundo onde o texto será escrito.
+    """
+    w, h = img.size
+    amostras = [0.35, 0.5, 0.65]
+    lums = []
+    for fracao in amostras:
+        regiao = img.crop((0, int(h * fracao), w, int(h * fracao) + 8)).convert("RGB").resize((1, 1))
+        r, g, b = regiao.getpixel((0, 0))
+        lums.append((0.299 * r + 0.587 * g + 0.114 * b) / 255)
+    return (sum(lums) / len(lums)) > 0.55
+
+
 @overload
-def create_slide_from_template(
-    template_key: str,
-    slide_num: int,
-    texto: str,
-    return_info: Literal[True] = True,
-) -> tuple[bytes, dict]: ...
 @overload
 def create_slide_from_template(
     template_key: str,
@@ -272,6 +284,15 @@ def create_slide_from_template(
     texto: str,
     return_info: Literal[False],
 ) -> bytes: ...
+
+
+@overload
+def create_slide_from_template(
+    template_key: str,
+    slide_num: int,
+    texto: str,
+    return_info: Literal[True] = True,
+) -> tuple[bytes, dict]: ...
 def create_slide_from_template(
     template_key: str,
     slide_num: int,
@@ -328,9 +349,18 @@ def create_slide_from_template(
     idx = min(slide_num - 1, len(estrutura) - 1)
     slide_info = estrutura[idx]
 
-    cor_branco    = (255, 255, 255, 255)
-    cor_destaque  = (255, 209, 102, 255)   # amarelo
-    cor_muted     = (255, 255, 255, 180)
+    # Paleta adaptativa: templates_base/ são claros (creme da marca) e o
+    # fallback é escuro (azul). Texto branco fixo fica ilegível no claro — o
+    # rascunho local saía com o texto praticamente apagado.
+    fundo_claro = _fundo_e_claro(img)
+    if fundo_claro:
+        cor_branco   = (18, 30, 54, 255)    # texto principal
+        cor_destaque = (180, 124, 20, 255)  # âmbar escurecido, mantém contraste
+        cor_muted    = (71, 85, 105, 230)
+    else:
+        cor_branco   = (255, 255, 255, 255)
+        cor_destaque = (255, 209, 102, 255)  # amarelo
+        cor_muted    = (255, 255, 255, 180)
 
     draw.text((80, 80),  f"Slide {slide_num}", font=font_label, fill=cor_muted)
     draw.text((80, 125), slide_info.tipo.upper(), font=font_label, fill=cor_destaque)

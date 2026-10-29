@@ -1,0 +1,33 @@
+{
+  "skill_name": "carrossel-vivo",
+  "evals": [
+    {
+      "id": 1,
+      "name": "prompt-minimo-para-carrossel",
+      "prompt": "cria um carrossel sobre a crianca ficar com raiva quando erra a prova de matematica",
+      "expected_output": "Skill monta um brief (eixo, persona, tom, CTA com palavra-chave e WhatsApp oficial), gera a ideia e os prompts dos 8 slides respeitando o padrão visual e o catálogo de referências, sem chamar o usuário com perguntas desnecessárias.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "carrossel-animado-com-referencia",
+      "prompt": "quero esse carrossel animado em mp4, com entrada suave nos slides e uma trilha tipo intimista, e quero que ele fique bem parecido com a foto da fachada que a gente tem",
+      "expected_output": "Skill define fidelity, mood/BPM, storyboard com durações em frames inteiros e entrega a receita de render Pillow + ffmpeg, respeitando área segura, tag de navegação e a foto real obrigatória nos slides 1/4/5/7.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "reclamacao-de-resultado-generico",
+      "prompt": "o carrossel que saiu ficou igualzinho a qualquer educador postando la, sem graça nenhuma. como eu faco pra sair do generico?",
+      "expected_output": "Resposta usa a escada dos 7 níveis para diagnosticar onde está a lacuna (referência + fidelidade + tom + acervo), aponta o nível atual do motor e propõe a ordem de implementação do references/niveis.md, sem sugerir comprar ferramenta cara como primeiro passo.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "salvar-aprovado-no-acervo",
+      "prompt": "esse aqui ficou bom, guarda esse layout e esse tom pra eu usar nos proximos",
+      "expected_output": "Skill explica que a gravação no acervo é por aprovação explícita, monta o dna (paleta, tipografia, ritmo, estrutura, recursos) em data/acervo/<slug>.json e avisa que métricas só entram depois de publicado.",
+      "files": []
+    }
+  ]
+}

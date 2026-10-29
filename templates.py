@@ -123,7 +123,7 @@ TEMPLATES: dict[str, dict] = {
             SlideEstrutura(5, "Entrega",      "Método passo a passo — etapa 3"),
             SlideEstrutura(6, "Ponte",        "Como o ensino individualizado resolve a lacuna", True, "alunos_apoio"),
             SlideEstrutura(7, "Prova",        "Foto real da fachada — Rua Coelho Lisboa, 783",  True, "fachada"),
-            SlideEstrutura(8, "CTA",          "Salve este post! Comente DESAFIO ou chame no WhatsApp (11) 94475-0009"),
+            SlideEstrutura(8, "CTA",          "Salve este post! Comente DESAFIO ou chame no WhatsApp (11) 94475-0009 para agendar uma avaliação pedagógica gratuita"),
         ],
     },
     "alivio_pressao": {
@@ -141,7 +141,7 @@ TEMPLATES: dict[str, dict] = {
             SlideEstrutura(5, "Entrega",      "Atitude prática 3 dos pais em casa"),
             SlideEstrutura(6, "Ponte",        "Diferença entre estudo passivo e ativo",          True, "alunos_apoio"),
             SlideEstrutura(7, "Prova",        "Foto real da fachada — portão branco, Tatuapé",   True, "fachada"),
-            SlideEstrutura(8, "CTA",          "Envie para outro pai/mãe ou fale no WhatsApp: (11) 94475-0009"),
+            SlideEstrutura(8, "CTA",          "Envie para outro pai/mãe ou fale no WhatsApp (11) 94475-0009 para agendar uma avaliação pedagógica gratuita"),
         ],
     },
     "conversao_diagnostica": {
@@ -159,7 +159,7 @@ TEMPLATES: dict[str, dict] = {
             SlideEstrutura(5, "Entrega",      "Atividades práticas do laboratório",                True, "laboratorio"),
             SlideEstrutura(6, "Ponte",        "Depoimento ou registro do laboratório",             True, "laboratorio"),
             SlideEstrutura(7, "Prova",        "Foto real da fachada — Unidade Tatuapé",            True, "fachada"),
-            SlideEstrutura(8, "CTA",          "Comente AULA ou agende sua visita no WhatsApp (11) 94475-0009"),
+            SlideEstrutura(8, "CTA",          "Comente AULA ou agende uma aula experimental gratuita no WhatsApp (11) 94475-0009"),
         ],
     },
 }

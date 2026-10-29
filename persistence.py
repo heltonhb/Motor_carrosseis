@@ -9,6 +9,7 @@ backend SQLite e migra cada coleção JSON na primeira leitura.
 Estrutura de arquivos:
     data/metricas.json          — histórico de métricas dos posts
     data/historico_geracoes.json — registro das gerações de conteúdo
+    data/acervo/*.json          — carrosséis aprovados, com o DNA do que funciona
 """
 
 import json
@@ -16,8 +17,19 @@ import os
 from datetime import datetime
 from typing import Any
 
-from config import DATA_DIR, HISTORICO_FILE, IDEIAS_ESTADO_FILE, METRICAS_FILE, SQLITE_FILE
+from config import (
+    BRIEF_FILE,
+    DATA_DIR,
+    HISTORICO_FILE,
+    IDEIAS_ESTADO_FILE,
+    METRICAS_FILE,
+    SQLITE_FILE,
+    STORYBOARD_FILE,
+)
 from sqlite_store import read_document, write_document
+
+# Um registro por arquivo no backend JSON; um documento só no SQLite.
+ACERVO_DIR = os.path.join(DATA_DIR, "acervo")
 
 # ─── Setup ───────────────────────────────────────────────────────────────────
 
@@ -275,6 +287,128 @@ def update_idea_status(
         estados[idea_id]["data_publicacao"] = data_publicacao
 
     return _write_json(IDEIAS_ESTADO_FILE, estados)
+
+
+# ─── Brief / Storyboard ──────────────────────────────────────────────────────
+#
+# O brief é a resposta às lacunas que o modelo deixaria em aberto (para quem,
+# com que objetivo, em que voz, com que aparência). O storyboard é o mesmo
+# contrato visto no tempo: cada slide com papel, duração e cue.
+#
+# Ambos são um por vez, sobrescritos — são estado de trabalho, não histórico.
+
+
+def salvar_brief(brief: dict) -> bool:
+    """Grava o brief atual em data/brief.json."""
+    ensure_data_dir()
+    brief = dict(brief)
+    brief.setdefault("atualizado_em", datetime.now().isoformat(timespec="seconds"))
+    return _write_json(BRIEF_FILE, brief)
+
+
+def carregar_brief() -> dict | None:
+    """Lê o brief atual, ou None se ainda não houver."""
+    data = _read_json(BRIEF_FILE)
+    return data if isinstance(data, dict) else None
+
+
+def salvar_storyboard(storyboard: dict) -> bool:
+    """Grava o storyboard atual em data/storyboard.json."""
+    ensure_data_dir()
+    storyboard = dict(storyboard)
+    storyboard.setdefault("atualizado_em", datetime.now().isoformat(timespec="seconds"))
+    return _write_json(STORYBOARD_FILE, storyboard)
+
+
+def carregar_storyboard() -> dict | None:
+    """Lê o storyboard atual, ou None se ainda não houver."""
+    data = _read_json(STORYBOARD_FILE)
+    return data if isinstance(data, dict) else None
+
+
+# ─── Acervo (carrosséis aprovados) ────────────────────────────────────────────
+#
+# O acervo é o nível 7 do motor: o conjunto do que a unidade aprovou, destilado
+# em DNA reaproveitável. Ele não guarda rascunho — guarda o padrão do que
+# funcionou, para as próximas gerações nascerem parecidas.
+#
+# Regra dura: só entra por promoção explícita (status "publicado" + métrica no
+# alvo do eixo). Acervo com rascunho ruim é pior que acervo vazio, porque o
+# motor passa a copiar o erro com confiança.
+
+
+def _acervo_path(slug: str) -> str:
+    """Caminho do registro de um slug do acervo."""
+    return os.path.join(ACERVO_DIR, f"{slug}.json")
+
+
+def load_acervo() -> list[dict]:
+    """
+    Carrega todos os registros do acervo, do mais recente para o mais antigo.
+
+    Um arquivo corrompido não derruba a leitura do acervo inteiro: ele é
+    ignorado. Perder um registro é melhor do que perder o aprendizado todo.
+    """
+    if not os.path.isdir(ACERVO_DIR):
+        return []
+
+    registros: list[dict] = []
+    for nome in os.listdir(ACERVO_DIR):
+        if not nome.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(ACERVO_DIR, nome), encoding="utf-8") as f:
+                registro = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(registro, dict):
+            registros.append(registro)
+
+    registros.sort(key=lambda r: r.get("aprovado_em", ""), reverse=True)
+    return registros
+
+
+def get_acervo(slug: str) -> dict | None:
+    """Lê um registro específico do acervo."""
+    data = _read_json(_acervo_path(slug))
+    return data if isinstance(data, dict) else None
+
+
+def save_acervo(registro: dict) -> bool:
+    """
+    Salva (ou sobrescreve) um registro do acervo.
+
+    O slug precisa existir no registro — sem ele não há como achar o arquivo
+    depois.
+    """
+    slug = (registro.get("slug") or "").strip()
+    if not slug:
+        return False
+    if _use_sqlite():
+        # No backend SQLite o acervo é um documento só: chave estável, todos os
+        # registros dentro. Mesmo formato de leitura para o chamador.
+        todos = {r.get("slug"): r for r in load_acervo() if r.get("slug")}
+        todos[slug] = registro
+        return _write_json(os.path.join(DATA_DIR, "acervo.json"), list(todos.values()))
+    # ensure_data_dir() cria data/ mas não data/acervo/: sem este makedirs a
+    # primeira promoção falhava em silêncio e devolvia False.
+    os.makedirs(ACERVO_DIR, exist_ok=True)
+    return _write_json(_acervo_path(slug), registro)
+
+
+def remover_acervo(slug: str) -> bool:
+    """Remove um registro do acervo. Verdadeiro se havia algo para remover."""
+    if _use_sqlite():
+        restantes = [r for r in load_acervo() if r.get("slug") != slug]
+        return _write_json(os.path.join(DATA_DIR, "acervo.json"), restantes)
+    caminho = _acervo_path(slug)
+    if not os.path.exists(caminho):
+        return False
+    try:
+        os.remove(caminho)
+        return True
+    except OSError:
+        return False
 
 
 # ─── Histórico de Gerações ────────────────────────────────────────────────────

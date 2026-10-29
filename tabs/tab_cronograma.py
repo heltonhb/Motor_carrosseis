@@ -56,7 +56,22 @@ def render() -> None:
     if st.session_state.get("cronograma"):
         cron = st.session_state["cronograma"]
 
-        st.markdown("### 📆 Calendário Visual")
+        st.html("""
+<div style="background:rgba(18, 18, 23, 0.65); backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:12px 18px; margin-bottom:18px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:18px;">📆</span>
+        <div>
+            <strong style="color:#FFFFFF; font-size:0.95rem;">Estratégia Semanal: Terça & Sexta</strong>
+            <span style="display:block; font-size:0.75rem; color:#94A3B8;">Janelas ideais mapeadas para pais de alunos no Tatuapé (12h30 e 19h15)</span>
+        </div>
+    </div>
+    <span style="font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:#76BC21; background:rgba(118,188,33,0.15); border:1px solid rgba(118,188,33,0.3); padding:3px 10px; border-radius:9999px; font-weight:700;">
+        CADÊNCIA 72H
+    </span>
+</div>
+        """)
+
+        st.markdown("### 📆 Calendário Visual de Publicações")
         all_days = (
             [dict(d, semana=1) for d in cron.get("semana_1", [])]
             + [dict(d, semana=2) for d in cron.get("semana_2", [])]
@@ -67,22 +82,25 @@ def render() -> None:
         # KPIs
         kpis = cron.get("kpis_semanais", {})
         if kpis:
-            st.markdown("### 🎯 Metas Semanais")
+            st.markdown("### 🎯 Metas Semanais de Performance")
             k1, k2, k3, k4 = st.columns(4)
             items = [
-                (k1, "💾 Salvamentos", kpis.get("meta_salvamentos", "≥4%"),    CORES["secundaria"]),
-                (k2, "📤 Envios DM",   kpis.get("meta_envios",       "≥2,5%"), CORES["destaque"]),
-                (k3, "🆕 Não Seguid.", kpis.get("meta_nao_seguidores","≥20%"), CORES["perigo"]),
-                (k4, "📱 Leads",       kpis.get("meta_leads",        "15-25"), CORES["primaria"]),
+                (k1, "💾 Salvamentos", kpis.get("meta_salvamentos", "≥4%"),    "#60A5FA", "rgba(36,99,235,0.15)"),
+                (k2, "📤 Envios DM",   kpis.get("meta_envios",       "≥2,5%"), "#38BDF8", "rgba(0,119,153,0.15)"),
+                (k3, "🆕 Não Seguid.", kpis.get("meta_nao_seguidores","≥20%"), "#F87171", "rgba(248,113,113,0.15)"),
+                (k4, "📱 Leads Meta",  kpis.get("meta_leads",        "15-25"), "#76BC21", "rgba(118,188,33,0.15)"),
             ]
-            for col, label, valor, cor in items:
+            for col, label, valor, cor, bg in items:
                 with col:
-                    st.markdown(f"""
-                    <div class="metric-box">
-                        <strong style="color:{cor};">{label}</strong><br>
-                        <span style="color:{CORES['texto']};font-size:1.2em;font-weight:700;">{valor}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.html(f"""
+<div style="background:rgba(24, 24, 31, 0.75); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:14px 16px; margin-bottom:12px; box-shadow:0 4px 14px -2px rgba(0,0,0,0.5);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span style="color:#94A3B8; font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">{label}</span>
+        <span style="width:8px; height:8px; border-radius:50%; background:{cor};"></span>
+    </div>
+    <div style="font-size:1.35rem; font-weight:800; color:#FFFFFF; font-family:'JetBrains Mono',monospace;">{valor}</div>
+</div>
+                    """)
 
         dicas = cron.get("dicas_monitoramento", [])
         if dicas:

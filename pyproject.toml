@@ -19,7 +19,7 @@ py-modules = ["app", "config", "gemini", "image_utils", "notebooklm_client", "pe
 include = ["tabs*"]
 
 [tool.pytest.ini_options]
-testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py", "test_ics_export.py", "test_prompts_validate.py", "test_metricas_feedback.py", "test_backup.py", "test_catalogo.py", "test_postproc.py", "test_notebooklm_client.py"]
+testpaths = ["test_parser_nlm.py", "test_batch_engine.py", "test_image_fix.py", "test_ics_export.py", "test_prompts_validate.py", "test_tom.py", "test_fidelidade.py", "test_acervo.py", "test_brief.py", "test_carrossel_vivo.py", "test_metricas_feedback.py", "test_backup.py", "test_catalogo.py", "test_postproc.py", "test_notebooklm_client.py"]
 
 [tool.ruff]
 line-length = 120

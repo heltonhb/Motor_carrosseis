@@ -10,11 +10,23 @@ import json
 
 import streamlit as st
 
+from acervo import avaliar_promocao, promover_para_acervo, resumo_acervo
 from batch_engine import gerar_prompts_ideia, normalizar_prompts
+from brief import montar_brief, montar_storyboard, resumo_storyboard, validar_brief
 from config import CORES
 from prompts import DICAS_SERIE_FLOW, cor_eh_valida, formatar_txt_prompts, validate_prompts
 from refs_catalog import arquivo_principal, rotulos_referencias
-from tabs._ui import api_key_ok, clipboard_button, empty_state, esc
+from tabs._ui import api_key_ok, clipboard_button, empty_state, esc, seletor_fidelidade
+
+
+def _prompts_da_ideia(ideia_id: str) -> dict | None:
+    """Procura no lote da sessão os prompts já gerados para uma ideia."""
+    if not ideia_id:
+        return None
+    for item in st.session_state.get("prompts_lote", []):
+        if (item.get("ideia") or {}).get("id") == ideia_id:
+            return item.get("prompts")
+    return None
 
 
 def render():
@@ -27,6 +39,7 @@ def render():
         return
 
     ideias_sel = st.session_state["ideias_selecionadas"]
+    fidelidade = seletor_fidelidade("fidelidade_prompts")
 
     # ── P1-1: Botão "Gerar para Todas" ──────────────────────────────────
     with st.container(border=True):
@@ -46,7 +59,10 @@ def render():
                     status.info(f"🎨 [{idx + 1}/{len(ideias_sel)}] Gerando prompts: {titulo}…")
                     avisos_gen: list = []
                     corrigidos_gen: list = []
-                    dados = gerar_prompts_ideia(ideia, forcar=True, avisos=avisos_gen, corrigidos=corrigidos_gen)
+                    dados = gerar_prompts_ideia(
+                        ideia, forcar=True, avisos=avisos_gen, corrigidos=corrigidos_gen,
+                        fidelidade=fidelidade,
+                    )
                     if dados:
                         item_gen = {
                             "titulo": titulo,
@@ -78,6 +94,77 @@ def render():
     opcoes_p = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
     escolha = st.selectbox("Ideia para gerar prompts:", list(opcoes_p.keys()), key="sel_prompt")
 
+    # ── Brief e storyboard (V8) ──────────────────────────────────────────
+    with st.expander("🗂 Brief e storyboard"):
+        _ideia_sel = opcoes_p[escolha]
+        _brief = montar_brief(_ideia_sel, tom=None, fidelidade=fidelidade, modo="vivo")
+        _avisos_brief = validar_brief(_brief)
+        st.caption(
+            "O brief é o contrato do carrossel (para quem, com que objetivo, em que "
+            "voz, com que aparência) e o storyboard é o mesmo contrato no tempo. "
+            "O renderer de animação (V9) vai consumir este JSON."
+        )
+        st.json(
+            {k: _brief[k] for k in ("titulo", "eixo", "tom", "cta", "referencias", "fidelidade", "trilha")},
+            expanded=False,
+        )
+        if _avisos_brief:
+            for _a in _avisos_brief:
+                st.warning(_a)
+
+        _col1, _col2 = st.columns(2)
+        with _col1:
+            if st.button("Gerar storyboard", key="btn_storyboard", width="stretch"):
+                _sb = montar_storyboard(_brief, prompts=_prompts_da_ideia(_ideia_sel.get("id", "")))
+                st.session_state["storyboard_atual"] = _sb
+                st.success(
+                    f"Storyboard com {_sb['total_frames']} frames "
+                    f"({_sb['duracao_total_s']}s a {_sb['bpm']} bpm)."
+                )
+        with _col2:
+            _sb_atual = st.session_state.get("storyboard_atual")
+            if _sb_atual:
+                _res = resumo_storyboard(_sb_atual)
+                st.metric("Duração", f"{_res['duracao_total_s']}s")
+                st.download_button(
+                    "Baixar storyboard.json",
+                    data=json.dumps(_sb_atual, ensure_ascii=False, indent=2),
+                    file_name="storyboard.json",
+                    mime="application/json",
+                    key="dl_storyboard",
+                )
+
+        _sb_atual = st.session_state.get("storyboard_atual")
+        if _sb_atual:
+            for _a in _sb_atual.get("avisos", []):
+                st.info(_a)
+
+    # ── Acervo: o que já funcionou ───────────────────────────────────────
+    _resumo = resumo_acervo()
+    with st.expander(
+        f"\N{BOOKS} Acervo — {_resumo['total']} carrossel(is) aprovado(s)"
+        + (f" · média de {_resumo['taxa_media']}% de salvamentos" if _resumo["com_metrica"] else ""),
+    ):
+        st.caption(
+            "Post **publicado** e com a taxa de salvamento no alvo do eixo entra no "
+            "acervo. O DNA dele (estrutura, recursos, paleta) é lido nas próximas "
+            "gerações, para o feed não nascer com cara de template."
+        )
+        _pode, _motivo = avaliar_promocao(opcoes_p[escolha])
+        (_st_ok := st.success)(_motivo) if _pode else (_st_ok := st.info)(_motivo)
+        if st.button("Promover ao acervo", key="btn_promover_acervo", disabled=not _pode):
+            registro, motivo = promover_para_acervo(
+                opcoes_p[escolha],
+                prompts=_prompts_da_ideia(opcoes_p[escolha].get("id", "")),
+                forcar=not _pode,
+            )
+            if registro:
+                st.success(f"\N{WHITE HEAVY CHECK MARK} Acervo atualizado: {motivo}")
+                st.rerun()
+
+    st.divider()
+
+
     if st.button("🎨 Gerar Prompts", type="primary", width="stretch"):
         if not api_key_ok():
             st.warning("⚠️ Configure a chave API Gemini.")
@@ -87,7 +174,8 @@ def render():
                 avisos_gen: list = []
                 corrigidos_gen: list = []
                 dados = gerar_prompts_ideia(
-                    ideia, forcar=True, avisos=avisos_gen, corrigidos=corrigidos_gen
+                    ideia, forcar=True, avisos=avisos_gen, corrigidos=corrigidos_gen,
+                    fidelidade=fidelidade,
                 )
                 if dados:
                     titulo = ideia.get("titulo", "Ideia")
@@ -185,8 +273,103 @@ def render():
             st.code(base_prompt, language=None)
             clipboard_button(base_prompt, "📋 Copiar Base Prompt", key="clip_base_prompt")
 
+        # ── Studio Visual de Carrossel (Inspirado no Google Stitch MCP) ───────
+        slides = prompts.get("slides", [])
+        if slides:
+            st.markdown("### 🎠 Studio Visual do Carrossel (Formato Instagram 4:5)")
+            studio_key = f"_studio_slide_{idx_p}"
+            if studio_key not in st.session_state or st.session_state[studio_key] >= len(slides):
+                st.session_state[studio_key] = 0
+
+            cur_idx = st.session_state[studio_key]
+            cur_slide = slides[cur_idx]
+            cur_num = cur_slide.get("slide_num", cur_idx + 1)
+            cur_style = cur_slide.get("estilo", "Slide")
+            cur_overlay = cur_slide.get("text_overlay", "")
+            cur_pt = cur_slide.get("prompt_pt", "")
+
+            # Controles de navegação rápida
+            nav_c1, nav_c2, nav_c3 = st.columns([1, 4, 1])
+            with nav_c1:
+                if st.button("◀ Anterior", key=f"prev_slide_{idx_p}", width="stretch", disabled=(cur_idx == 0)):
+                    st.session_state[studio_key] = max(0, cur_idx - 1)
+                    st.rerun()
+            with nav_c2:
+                # Seletor de botões de miniaturas 1 a 8
+                cols_thumbs = st.columns(len(slides))
+                for s_i, sl in enumerate(slides):
+                    s_label = f"S{sl.get('slide_num', s_i+1)}"
+                    is_active = (s_i == cur_idx)
+                    with cols_thumbs[s_i]:
+                        if st.button(
+                            s_label,
+                            key=f"thumb_{idx_p}_{s_i}",
+                            type="primary" if is_active else "secondary",
+                            width="stretch",
+                            help=sl.get("estilo", f"Slide {s_i+1}"),
+                        ):
+                            st.session_state[studio_key] = s_i
+                            st.rerun()
+            with nav_c3:
+                if st.button("Próximo ▶", key=f"next_slide_{idx_p}", width="stretch", disabled=(cur_idx >= len(slides) - 1)):
+                    st.session_state[studio_key] = min(len(slides) - 1, cur_idx + 1)
+                    st.rerun()
+
+            # Moldura do Slide 4:5 com Glassmorphism Stitch
+            is_cta = (cur_num == 8 or "CTA" in cur_style.upper())
+            badge_color = "#76BC21" if is_cta else "#2463eb"
+            badge_text = "CTA FINAL & CONVERSÃO" if is_cta else cur_style.upper()
+
+            st.html(f"""
+<div style="display:flex; justify-content:center; margin: 16px 0 24px 0;">
+    <div style="width:100%; max-width:480px; min-height:540px; background:linear-gradient(180deg, #14141d 0%, #0c0c11 100%);
+                border:2px solid rgba(255, 255, 255, 0.1); border-radius:20px; box-shadow:0 20px 40px -10px rgba(0,0,0,0.8), 0 0 25px -5px rgba(36,99,235,0.25);
+                padding:24px 26px; display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden;">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); z-index:2;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg, #2463eb 0%, #76BC21 100%); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; color:#FFFFFF;">
+                    EM
+                </div>
+                <div>
+                    <span style="font-weight:700; font-size:0.85rem; color:#FFFFFF; display:flex; align-items:center; gap:4px;">
+                        ensinamais.tatuape
+                        <span style="color:#2463eb; font-size:13px;">✓</span>
+                    </span>
+                    <span style="font-size:0.68rem; color:#94A3B8; display:block; margin-top:-2px;">Educação e Apoio Escolar</span>
+                </div>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:0.68rem; font-weight:700; color:{badge_color}; background:rgba(36,99,235,0.15); border:1px solid rgba(36,99,235,0.3); padding:3px 8px; border-radius:6px; letter-spacing:0.04em;">
+                {esc(badge_text)}
+            </span>
+        </div>
+
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:32px 12px; z-index:2;">
+            <div style="font-size:1.45rem; font-weight:800; line-height:1.35; color:#FFFFFF; letter-spacing:-0.02em; text-shadow:0 2px 10px rgba(0,0,0,0.5); margin-bottom:18px;">
+                "{esc(cur_overlay or 'Texto Principal do Slide')}"
+            </div>
+            <div style="font-size:0.82rem; color:#94A3B8; line-height:1.5; max-width:380px; background:rgba(0,0,0,0.4); padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.06);">
+                💡 <strong style="color:#E2E8F0;">Cena:</strong> {esc(cur_pt[:180] + ('…' if len(cur_pt) > 180 else ''))}
+            </div>
+        </div>
+
+        <div style="padding-top:14px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94A3B8; z-index:2;">
+            <div style="display:flex; align-items:center; gap:4px; font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:#64748B;">
+                <span style="color:#76BC21;">📍</span> Tatuapé &bull; SP
+            </div>
+            <div style="color:{'#76BC21' if is_cta else '#60A5FA'}; font-weight:700; display:flex; align-items:center; gap:4px;">
+                {'📲 Chame no WhatsApp (11) 94475-0009' if is_cta else 'Mova para o próximo ➔'}
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-weight:800; color:#E2E8F0;">
+                {cur_num}/{len(slides)}
+            </div>
+        </div>
+    </div>
+</div>
+            """)
+
         # ── P1-2: Editor inline de prompts por slide ─────────────────────
-        st.markdown("### 📸 Prompts por Slide")
+        st.markdown("### 📸 Prompts Detalhados por Slide")
         ref_labels = rotulos_referencias()
 
         # Flag para detectar edições

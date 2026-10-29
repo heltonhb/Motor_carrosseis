@@ -13,7 +13,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from config import TAG_NAVEGACAO
+from config import TAG_NAVEGACAO, TONES_PADRAO, TONES_POR_EIXO
 from refs_catalog import (
     CENAS_FOTO,
     cena_valida,
@@ -83,8 +83,9 @@ SYSTEM_INSTRUCTION_PERSONA = """Você é a CAROL — Consultora de Aceleração 
 
 ═══ REGRAS INVIOLÁVEIS ═══
 1. TURMA DA MÔNICA — REGRA DUPLA: (a) PERMITIDO citar o logo oficial "Ensina Mais Turma da Mônica", a fachada e o painel real da unidade — são referências fotográficas da própria marca; (b) PROIBIDO mencionar ou descrever personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu, Chico Bento, Pit Lelé, etc.) — são marca registrada, reservados à franqueadora.
-2. Todo CTA DEVE incluir o WhatsApp: (11) 94475-0009
+2. CTA / SLIDE FINAL (INVIOLÁVEL): O Slide final (CTA) DEVE SEMPRE oferecer uma aula experimental gratuita (em posts de tecnologia: Robótica ou Programação) ou avaliação pedagógica gratuita (em posts de apoio escolar: Português ou Matemática) e pedir para entrar em contato via WhatsApp oficial da unidade: (11) 94475-0009
 3. Nunca invente depoimentos com nomes falsos de pessoas físicas. Use: "Depoimento real de família do Tatuapé" ou "Caso de aluno do Ensino Fundamental"
+3b. DADO SEM FONTE É PROIBIDO (vale tanto para texto de slide quanto para legenda): nenhum número, porcentagem, tempo de queda, taxa de ganho, "milhares de alunos", "estudo comprova" ou "dado chocante" pode aparecer sem citar a fonte real (IBGE, INEP, PISA, SAEB, IESL/Pesquisa ABC, dados da própria unidade) ou sem estar marcado como observação da unidade ("na nossa sala", "com os alunos que atendemos", "ano passado na unidade"). Se não houver fonte, ESCREVA O FATO EM LINGUAGEM OBSERVACIONAL, SEM NÚMERO: "os alunos que chegam ao 5º ano costumam travar na mesma conta" em vez de "80% erram essa conta". Número bonito e falso é o que mais destrói a confiança de um pai — e é o que faz o post parecer de qualquer educador.
 4. Todo texto visível em imagem DEVE ser em PORTUGUÊS DO BRASIL
 5. Prompts de geração de imagem (prompt_en) devem ser em INGLÊS
 6. A tag de navegação "Mova para o próximo ➔" deve aparecer nos slides 1 a 7 e nunca no último slide
@@ -212,7 +213,7 @@ Use pelo menos 4 destes tipos entre as 6 ideias:
 • Slides 4 e 5 (Thumbnails de aplicação): Repetir a receita do slide 1 — foto real + texto curto de 3 a 8 palavras com gancho visual forte conectado ao método
 • Slide 6 (Aplicação/Ponte): Como aplicar na prática através do método individualizado da Ensina Mais (entrega de alto valor pedagógico, sem quebra brusca para autopromoção)
 • Slide 7 (Transformação/Prova): Caso real de aluno, superação ou depoimento acolhedor integrado à unidade física (Rua Coelho Lisboa, 783)
-• Slide 8 (CTA + Loop Orgânico): Palavra-chave + WhatsApp (11) 94475-0009 + gatilho de re-leitura ("volte ao slide X") ou envio por direct para o outro responsável
+• Slide 8 (CTA + Loop Orgânico): Oferta obrigatória de aula experimental gratuita (em posts de tecnologia) ou avaliação pedagógica gratuita (em posts de apoio escolar) + convite para entrar em contato via WhatsApp (11) 94475-0009 + palavra-chave de comentário + gatilho de re-leitura ("volte ao slide X") ou envio por direct para o outro responsável
 
 ─── 4. REGRAS ───
 • Varie as personas-alvo entre as ideias
@@ -239,7 +240,7 @@ Retorne JSON:
         {"slide": 5, "tipo": "Entrega", "texto": "..."},
         {"slide": 6, "tipo": "Ponte", "texto": "..."},
         {"slide": 7, "tipo": "Prova", "texto": "..."},
-        {"slide": 8, "tipo": "CTA", "texto": "Comente PALAVRA_CHAVE ou chame no WhatsApp (11) 94475-0009..."}
+        {"slide": 8, "tipo": "CTA", "texto": "Comente PALAVRA_CHAVE ou chame no WhatsApp (11) 94475-0009 para agendar uma aula experimental (se tecnologia) ou avaliação pedagógica (se apoio escolar)..."}
       ],
       "kpi_alvo": "Salvamentos / Envios / Leads",
       "justificativa": "...",
@@ -253,11 +254,150 @@ Retorne JSON:
 PROMPT_IDEIAS = PROMPT_IDEIAS_BASE
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# TONS DE VOZ (GHOSTWRITER)
+# ═══════════════════════════════════════════════════════════════════════════════
+# A persona CAROL continua sendo a base de todas as chamadas. O tom é a camada
+# que ajusta o registro dela para um carrossel específico — é o que impede dois
+# posts do mesmo eixo de saírem com a mesma voz.
+#
+# Cada tom muda o TEXTO. Ele nunca afrouxa as regras do motor: WhatsApp oficial,
+# palavra-chave do eixo, ausência de personagens da Turma da Mônica e CTA
+# honesto continuam obrigatórios em qualquer tom.
+
+TONES: dict[str, dict[str, str]] = {
+    "natural": {
+        "rotulo": "Natural — mãe falando com mãe",
+        "instrucao": """REGISTRO NATURAL (fala de mãe pra mãe no grupo do bairro):
+• Frases de 8 a 14 palavras, como conversa, não como texto de campanha.
+• Treat a família como iguais: "a gente", "seu filho", "quem já passou por isso".
+• Um detalhe doméstico concreto por slide (copo no lugar errado, tarefa de
+  última hora, discussão na mesa de jantar) — nunca abstrações como "lacuna" ou "base".
+• PROIBIDO: "olha, pessoal", "quer saber", "gente", "vamos aprender", tom de
+  palestra, jargão pedagógico, qualquer emoji no texto dos slides.""",
+    },
+    "didatico": {
+        "rotulo": "Didático — o professor explica o passo",
+        "instrucao": """REGISTRO DIDÁTICO (quem explica e sabe mostrar o caminho):
+• Frases de 12 a 20 palavras, imperativo, na ordem em que a família vai fazer.
+• Numere passos quando couber ("1) leia duas vezes", "2) grife o verbo").
+• Cada slide entrega UMA coisa que dá para aplicar no mesmo dia.
+• Justifique o porquê em uma frase, sem defender a teoria: o pai precisa ver o
+  mecanismo, não acreditar nele.
+• PROIBIDO: "é importante lembrar", "vamos aprender juntos", tom de reprovação
+  ("você deveria ter..."), tom Motivacional vazio.""",
+    },
+    "storyteller": {
+        "rotulo": "Storyteller — cena concreta que vira insight",
+        "instrucao": """REGISTRO STORYTELLER (cena real que vira entendimento do problema):
+• A primeira frase de cada slide é uma imagem sensorial e datável — o que dá
+  para ver, ouvir ou sentir na cena. Duas a três frases por slide.
+• O insight vem DEPOIS da cena, nunca antes: primeiro o pai se reconhece, depois
+  entende.
+• Use o contraste como estrutura: "não é X, é Y" — o equívoco comum da família
+  entra em cena e é desmontado.
+• PROIBIDO: clichê motivacional ("no fim, tudo se encaixa"), "imagina só",
+  "era uma vez", metáfora de guerra, promessa de transformação.""",
+    },
+    "especialista": {
+        "rotulo": "Especialista — voz de quem domina o tema",
+        "instrucao": """REGISTRO ESPECIALISTA (quem domina o tema e o mercado):
+• Frases de 12 a 18 palavras, com critério e dado: "por padrão de sala", "no
+  Fundamental, a leitura...", "quem busca isso normalmente...".
+• Assuma conhecimento prévio do leitor e não explique o óbvio.
+• Nomeie o método e o critério: a família precisa saber em que base você mede.
+• Números só com fonte real e verificável (INEP, PISA, SAEB, dados da própria
+  unidade). Sem fonte, escreva em linguagem observacional, SEM número.
+• PROIBIDO: "milagre", "revolucionário", "o melhor do mercado", superlativo
+  sem lastro, argumento de autoridade.""",
+    },
+    "viral": {
+        "rotulo": "Viral — gancho forte e entrega rápida",
+        "instrucao": """REGISTRO VIRAL (interrompe o scroll e entrega antes de cansar):
+• Gancho de capa com no máximo 12 palavras, direto na tensão do pai.
+• Entregue o valor ANTES da explicação: o slide 2 já tem que servir para
+  alguma coisa, não só contextualizar.
+• Listas curtas e escaneáveis; uma ideia por linha.
+• O CTA final é curto e sem construção de urgência falsa.
+• PROIBIDO: clickbait que o carrossel não entrega, CAIXA ALTA, excesso de emoji,
+  promessa de resultado ("você vai triplicar a nota"), prazo inventado.""",
+    },
+}
+
+# Registro usado quando não há eixo conhecido ainda (ex.: Ideias antes de
+# qualquer triagem). O eixo resolve depois, quando a ideia já tem dono.
+TONES_PADRAO_POR_EIXO = TONES_POR_EIXO
+
+
+def tom_eh_valido(tom: str) -> bool:
+    """True se o tom existe em TONES ou é o pseudo-tom "automatico"."""
+    return tom in TONES or tom == TONES_PADRAO
+
+
+def resolver_tom(tom: str | None = None, eixo: str | None = None) -> str:
+    """
+    Resolve o tom efetivo.
+
+    "automatico" vira o registro do eixo (Didático→didatico,
+    Comportamental→storyteller, Diagnóstico→especialista). Sem eixo conhecido,
+    cai em "natural", que é o registro de menor risco: conversa, não campanha.
+
+    Tom desconhecido não é erro — vira "natural". Um selectbox sempre devolve
+    valor válido, mas um payload vindo do NotebookLM ou de um JSON antigo pode
+    não trazer o campo, e aí o certo é gerar mesmo assim.
+    """
+    tom = (tom or TONES_PADRAO).strip().lower()
+    if tom == TONES_PADRAO:
+        return TONES_POR_EIXO.get(eixo or "", "natural")
+    return tom if tom in TONES else "natural"
+
+
+# Lembrança das regras do motor que nenhum registro pode afrouxar. Aparece em
+# todos os tons, inclusive no automático: sem essa âncora, o bloco automático
+# valia como "escreva do seu jeito".
+TOM_NAO_AFROUXA = (
+    "As regras de segurança e de verdade do motor continuam valendo por cima de "
+    "qualquer registro: nenhum personagem da Turma da Mônica, nenhum número sem "
+    "fonte real, nenhuma promessa de resultado, nenhum exagero."
+)
+
+def bloco_tom(tom: str | None = None, eixo: str | None = None, variacao: bool = True) -> str:
+    """
+    Bloco de prompt que descreve o registro de voz pedido.
+
+    `variacao` diz se a chamada gera um lote (ideias) ou uma peça só (legenda de
+    um carrossel específico). No lote, "automatico" manda misturar o registro
+    conforme o eixo de cada ideia — seis ideias com a mesma voz viram seis
+    carrosséis com a mesma cara. Numa peça única, "automatico" resolve pelo eixo
+    da peça, porque não existe mistura possível dentro de um texto só.
+    """
+    if (tom or TONES_PADRAO) == TONES_PADRAO and variacao:
+        return (
+            "\n\n─── \N{MICROPHONE} VOZ (TOM AUTOMÁTICO) ───\n"
+            "Varie o registro entre as ideias conforme o eixo de cada uma: registro "
+            "didático para o eixo Didático, registro de cena e roteirizado para o "
+            "Comportamental, registro de especialista com critério para o "
+            "Diagnóstico. Duas ideias do mesmo eixo com a mesma voz viram duas "
+            "versões do mesmo post — varye.\n"
+            f"{TOM_NAO_AFROUXA}\n"
+        )
+    efetivo = resolver_tom(tom, eixo)
+    spec = TONES[efetivo]
+    return (
+        f"\n\n─── \N{MICROPHONE} VOZ ({spec['rotulo']}) ───\n"
+        f"Este texto inteiro é escrito com este registro. {TOM_NAO_AFROUXA}\n"
+        + f"{spec['instrucao']}\n"
+    )
+
+
+
+
+
 # ─── Feedback Loop de Métricas ────────────────────────────────────────────────
-def build_ideas_prompt_with_feedback() -> str:
+def build_ideas_prompt_with_feedback(tom: str | None = None) -> str:
     """
     Enriquece o prompt de geração de ideias com o aprendizado de performance real
-    salvo no disco da unidade (data/metricas.json).
+    salvo no disco da unidade (data/metricas.json) e com o tom de voz escolhido.
     """
     try:
         from persistence import load_metricas
@@ -266,15 +406,17 @@ def build_ideas_prompt_with_feedback() -> str:
         # métricas são opcionais: sem arquivo/válido → usa prompt base
         metricas = []
 
+    voz = bloco_tom(tom)
+
     if not metricas:
-        return PROMPT_IDEIAS_BASE
+        return PROMPT_IDEIAS_BASE + voz
 
     posts_validos = [
         m for m in metricas
         if m.get("alcance", 0) > 0 and str(m.get("titulo", "")).strip()
     ]
     if not posts_validos:
-        return PROMPT_IDEIAS_BASE
+        return PROMPT_IDEIAS_BASE + voz
 
     top_salvamentos = sorted(
         posts_validos, key=lambda m: m.get("taxa_salvamentos", 0), reverse=True
@@ -305,12 +447,117 @@ def build_ideas_prompt_with_feedback() -> str:
             bloco += f"  - \"{m.get('titulo')}\": {m.get('leads_whatsapp', 0)} leads gerados\n"
 
     bloco += "\nInstrução: Replique o tom, clareza e gatilhos desses conteúdos bem-sucedidos nas novas ideias geradas.\n"
-    return PROMPT_IDEIAS_BASE + bloco
+    return PROMPT_IDEIAS_BASE + bloco + voz
 
 
-def get_prompt_ideias() -> str:
-    """Retorna o prompt de ideias com injeção automática de feedback de métricas."""
-    return build_ideas_prompt_with_feedback()
+def get_prompt_ideias(tom: str | None = None) -> str:
+    """
+    Prompt de ideias com feedback de métricas e tom de voz injetados.
+
+    O tom entra no texto do prompt (e não na temperatura) porque ele não é
+    creativity — é registro. A temperatura sobe um pouco em tons mais ousados,
+    mas o peso do efeito vem da instrução.
+    """
+    return build_ideas_prompt_with_feedback(tom)
+
+
+def get_prompt_legendas(tom: str | None = None, eixo: str | None = None) -> str:
+    """
+    Prompt de legendas com o tom de voz injetado.
+
+    A legenda é o texto que o pai lê depois de salvar o carrossel, então ela
+    carrega o registro com mais peso que o slide: é aqui que o tom "natural"
+    mais aparece para o leitor.
+    """
+    if not tom_eh_valido(tom or TONES_PADRAO):
+        tom = TONES_PADRAO
+    return PROMPT_LEGENDAS + bloco_tom(tom, eixo, variacao=False)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIDELIDADE À REFERÊNCIA
+# ═══════════════════════════════════════════════════════════════════════════════
+# Sem referência visual, o modelo cai no visual padrão dele — que é exatamente
+# o "cara de slop" que faz o carrossel parecer de qualquer educador. A referência
+# já existe no motor (refs_catalog); o que faltava era dizer ao modelo o que
+# fazer com ela.
+#
+# Os três níveis não mandam refazer a foto: a regra 2 dos prompts de imagem (a
+# foto real é camada, não matéria-prima) vale acima de qualquer fidelidade.
+
+FIDELIDADES: dict[str, str] = {
+    "baixa": (
+        "Use a referência só como INSPIRAÇÃO DE ATMOSFERA: pegue o clima, a "
+        "sensação de luz e a paleta geral. Layout, enquadramento e tipografia "
+        "são livres para seguir a composição descrita no slide."
+    ),
+    "media": (
+        "Use a referência como GUIA DE IDENTIDADE: respeite a paleta, a "
+        "tipografia, o grid e a hierarquia visual dela. Enquadramento e layout "
+        "podem se adaptar ao conteúdo do slide, mas a peça precisa parecer da "
+        "mesma família visual da referência."
+    ),
+    "alta": (
+        "Replique a referência com alta fidelidade: mesma composição, mesmo "
+        "enquadramento, mesma distribuição de peso no quadro, mesmo tratamento "
+        "de luz. Troque APENAS o texto e o conteúdo. Se algo da referência "
+        "depender de um detalhe que não pode ser reproduzido, preserve a "
+        "aparência e a posição, nunca o detalhe."
+    ),
+}
+
+FIDELIDADE_PADRAO = "media"
+
+
+def fidelidade_eh_valida(fidelidade: str | None) -> bool:
+    """True se o nível existe em FIDELIDADES."""
+    return (fidelidade or "").strip().lower() in FIDELIDADES
+
+
+def resolver_fidelidade(fidelidade: str | None = None, tem_imagem: bool = True) -> tuple[str, list[str]]:
+    """
+    Resolve a fidelidade efetiva e devolve (nivel, avisos).
+
+    Alta fidelidade só existe se a referência chega ao Gemini como imagem. Com
+    FLOW_FOTOS desligado o modelo recebe apenas o texto da cena, e não tem o que
+    copiar — prometer "alta" ali seria propaganda enganosa. O downgrade é
+    automático e avisado, porque degrade silencioso só é percebido no resultado.
+    """
+    avisos: list[str] = []
+    nivel = (fidelidade or FIDELIDADE_PADRAO).strip().lower()
+    if nivel not in FIDELIDADES:
+        avisos.append(
+            f"Fidelidade \"{nivel}\" não existe — usando \"{FIDELIDADE_PADRAO}\"."
+        )
+        nivel = FIDELIDADE_PADRAO
+
+    if nivel == "alta" and not tem_imagem:
+        avisos.append(
+            "Fidelidade alta pede referência como imagem, mas nenhuma foto está "
+            "sendo anexada (FLOW_FOTOS desligado). Baixando para média — o modelo "
+            "recebeu só o texto da cena."
+        )
+        nivel = "media"
+    return nivel, avisos
+
+
+def bloco_fidelidade(fidelidade: str | None = None, tem_imagem: bool = True) -> str:
+    """
+    Instrução de fidelidade injetada no prompt de imagem.
+
+    Sempre seguida da regra que não cede: a foto real dos slides 1, 4, 5 e 7 é
+    intocável. Fidelidade alta não é permissão para redesenhar o rosto de um
+    aluno ou a fachada da escola.
+    """
+    nivel, _avisos = resolver_fidelidade(fidelidade, tem_imagem)
+    return (
+        f"\n\n─── \N{FRAME WITH PICTURE} FIDELIDADE À REFERÊNCIA ({nivel.upper()}) ───\n"
+        f"{FIDELIDADES[nivel]}\n"
+        "Esta instrução NUNCA sobrepõe a regra da foto real: nos slides 1, 4, 5 e 7 "
+        "a fotografia é camada intocável e recebe apenas composição tipográfica "
+        "por cima. Fidelidade alta governa o resto do frame — o que não estava na "
+        "foto.\n"
+    )
 
 
 # ─── Validador de Diversidade e Hooks ─────────────────────────────────────────
@@ -343,14 +590,26 @@ def validate_idea_diversity(ideias: list[dict]) -> list[str]:
         warnings.append("⚠️ Pouca variedade nos formatos de hook (menos de 3 tipos diferentes).")
 
     faltam_wpp = 0
+    faltam_oferta = 0
     for ideia in ideias:
         slides = ideia.get("slides_sugeridos", [])
         if slides:
             ultimo = slides[-1].get("texto", "")
             if "94475-0009" not in ultimo:
                 faltam_wpp += 1
+            curso_ou_tema = f"{ideia.get('tema', '')} {ideia.get('curso', '')} {ideia.get('titulo', '')}".lower()
+            is_tec = any(k in curso_ou_tema for k in ("robót", "robot", "prog", "tecnol", "game", "cód", "cod"))
+            ultimo_low = ultimo.lower()
+            if is_tec:
+                if not any(k in ultimo_low for k in ("aula experimental", "experimental")):
+                    faltam_oferta += 1
+            elif any(k in curso_ou_tema for k in ("matemát", "matemat", "portugu", "redação", "redacao", "apoio", "reforço", "reforco", "escola")):
+                if not any(k in ultimo_low for k in ("avaliação", "avaliacao", "diagnóstic", "diagnostic")):
+                    faltam_oferta += 1
     if faltam_wpp > 0:
         warnings.append(f"⚠️ {faltam_wpp} ideia(s) estão sem o número de WhatsApp oficial no slide final.")
+    if faltam_oferta > 0:
+        warnings.append(f"⚠️ {faltam_oferta} ideia(s) com slide final sem a oferta correta (aula experimental para tecnologia ou avaliação pedagógica para apoio escolar).")
 
     return warnings
 
@@ -434,6 +693,49 @@ FRASE_FOTO_REAL = (
 def cor_eh_valida(cor) -> bool:
     """True se `cor` é um hex CSS seguro (#RGB/#RRGGBB) para style/HTML."""
     return isinstance(cor, str) and bool(_HEX_RE.fullmatch(cor.strip()))
+
+
+# Números que carregam pretensão de dado. "5 questões" é conteúdo; "80%",
+# "3x mais rápido" e "milhares" são estatística — e estatística sem fonte é
+# mentira, mesmo quando soa verdadeira.
+_RE_NUMERO_DADO = re.compile(
+    r"\d+(?:[.,]\d+)?\s*(?:%|por\s?cento|x\b|vezes|milh[õo]es|milhares|\bmil\b|\bmi\b|\bbi\b)",
+    re.IGNORECASE,
+)
+
+# Marcas de fonte: agency's pública, ou a experiência da própria unidade.
+_MARCAS_FONTE = (
+    "ibge", "inep", "pisa", "saeb", "iesl", "pesquisa abc", "cncd", "data senac",
+    "unesp", "usp", "ufrgs", "folha", "estudo", "pesquisa", "dados do inei",
+    "segundo o", "de acordo com",
+)
+
+# Marcas de observação própria: a unidade pode falar do que viu, desde que diga
+# que é observação e não estatística.
+_MARCAS_OBSERVACAO = (
+    "na nossa sala", "na nossa unidade", "na unidade", "em nossa sala",
+    "com os alunos que atendemos", "com as famílias que", "ano passado na unidade",
+    "na prática", "no dia a dia da sala", "a gente observa", "nossas aulas",
+    "dados da unidade", "nosso acompanhamento",
+)
+
+
+def texto_tem_fonte(texto: str) -> bool:
+    """True se o texto cita fonte de verdade ou se apresenta como observação."""
+    low = (texto or "").lower()
+    if any(m in low for m in _MARCAS_FONTE):
+        return True
+    return any(m in low for m in _MARCAS_OBSERVACAO)
+
+
+def numeros_sem_fonte(texto: str) -> list[str]:
+    """Lista os números com aparência de dado que não têm fonte no texto."""
+    achados = [m.group(0).strip() for m in _RE_NUMERO_DADO.finditer(texto or "")]
+    if not achados:
+        return []
+    if texto_tem_fonte(texto):
+        return []
+    return achados
 
 
 def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
@@ -545,6 +847,18 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
             avisos.append(f"⚠️ Slide {snum}: prompt_pt vazio — descreva o slide em PT-BR.")
         if not overlay:
             avisos.append(f"⚠️ Slide {snum}: text_overlay vazio.")
+
+        # Regra 3b — número com cara de dado e sem fonte. É o aviso que mais
+        # importa aqui: número inventado é o que faz o post parecer genérico e
+        # destrói a confiança do pai quando ele pesquisa.
+        for onde, trecho in (("text_overlay", overlay), ("prompt_pt", slide.get("prompt_pt") or "")):
+            sem_fonte = numeros_sem_fonte(trecho)
+            if sem_fonte:
+                avisos.append(
+                    f"⚠️ Slide {snum}: {onde} usa {', '.join(sem_fonte)} sem citar fonte "
+                    "(regra 3b). Reescreva em linguagem observacional, sem número, ou "
+                    "cite a fonte no próprio texto."
+                )
         # Regra 5 — cláusula de idioma do overlay: exatamente UMA ocorrência
         n_clausulas = len(
             re.findall(r"in\s+Brazilian\s+Portuguese\s*:\s*['\"]", pen, re.IGNORECASE)
@@ -686,11 +1000,20 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                         f"({inter:.0%} de palavras em comum) — revise a fidelidade ao roteiro (regra 8)."
                     )
 
-    # CTA inviolável: último slide com o WhatsApp
+    # CTA inviolável: último slide com o WhatsApp e oferta correspondente
     ultimo = slides[-1]
     ultimo_txt = f"{ultimo.get('text_overlay', '')} {ultimo.get('prompt_en', '')}"
     if "94475" not in ultimo_txt:
         avisos.append("⚠️ Último slide sem o WhatsApp (11) 94475-0009 no CTA.")
+    if ideia:
+        curso_ou_tema = f"{ideia.get('tema', '')} {ideia.get('curso', '')} {ideia.get('titulo', '')}".lower()
+        is_tec = any(k in curso_ou_tema for k in ("robót", "robot", "prog", "tecnol", "game", "cód", "cod"))
+        is_apoio = any(k in curso_ou_tema for k in ("matemát", "matemat", "portugu", "redação", "redacao", "apoio", "reforço", "reforco", "escola"))
+        ultimo_all = f"{ultimo.get('text_overlay', '')} {ultimo.get('prompt_en', '')} {ultimo.get('prompt_pt', '')}".lower()
+        if is_tec and not any(k in ultimo_all for k in ("aula experimental", "experimental", "trial class")):
+            avisos.append("⚠️ Último slide (CTA): carrossel de tecnologia deve oferecer aula experimental (regra 13).")
+        elif is_apoio and not any(k in ultimo_all for k in ("avaliação", "avaliacao", "diagnóstic", "diagnostic", "assessment")):
+            avisos.append("⚠️ Último slide (CTA): carrossel de apoio escolar deve oferecer avaliação pedagógica (regra 13).")
 
     return avisos
 
@@ -715,7 +1038,7 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
 • SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + texto curto de 3-8 palavras compondo sobre a foto. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
 • SLIDE 6 (Ponte; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
 • SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Composição profissional SOBRE a foto da fachada da Rua Coelho Lisboa, 783. A foto entra como camada de fundo full-bleed, intacta — proibido redesenhar, reestilizar, recolorir ou regenerar. Sobre ela: cartão de depoimento/prova social com bordas arredondadas + legenda. O prompt_en DEVE conter a cláusula FRASE_FACHADA.
-• SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) ("Agende uma aula experimental gratuita" / WhatsApp (11) 94475-0009), ícones minimalistas de salvar + compartilhar DM.
+• SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) oferecendo SEMPRE uma aula experimental gratuita (em posts de tecnologia: Robótica ou Programação) ou avaliação pedagógica gratuita (em posts de apoio escolar: Português ou Matemática) e pedindo para entrar em contato via WhatsApp oficial (11) 94475-0009, ícones minimalistas de salvar + compartilhar DM.
 
 ─── REGRAS DO PROMPT ───
 1. prompt_en em INGLÊS, text_overlay em PORTUGUÊS DO BRASIL.
@@ -741,7 +1064,18 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
    (b) slide 7: deve incluir "fachada";
    (c) a cena deve traduzir o CONTEÚDO do slide (robótica → "alunos_robotica"; programação → "aluno_programacao"; apoio/reforço → "alunos_apoio"; identidade/prova → "fachada");
    (d) use EXATAMENTE as chaves do catálogo, em minúsculas — qualquer valor fora da lista é inválido.
-12. FACHADA INTOCÁVEL: quando "fachada" estiver nas "referencias" de um slide (sempre no 7), o prompt_en DEVE conter exatamente esta cláusula: "{FRASE_FACHADA}" — a foto de referência NUNCA é modificada, só recebe legenda/cartão por cima."""
+12. FACHADA INTOCÁVEL: quando "fachada" estiver nas "referencias" de um slide (sempre no 7), o prompt_en DEVE conter exatamente esta cláusula: "{FRASE_FACHADA}" — a foto de referência NUNCA é modificada, só recebe legenda/cartão por cima.
+13. SLIDE 8 (CTA FINAL): O Slide final (text_overlay e prompt_en) DEVE SEMPRE oferecer uma aula experimental gratuita (em posts de tecnologia: Robótica ou Programação) ou avaliação pedagógica gratuita (em posts de apoio escolar: Português ou Matemática) e pedir para entrar em contato via WhatsApp da unidade (11) 94475-0009.
+
+─── DIRETRIZES DE PROMPT CRAFT — GOOGLE FLOW / IMAGEFX / IMAGEN ───
+14. Todo prompt_en é lido por um modelo de imagem do ecossistema Google. Construa cada prompt_en como UMA descrição em inglês, direta e coesa, cobrindo os cinco eixos abaixo (vírgulas ou frases curtas, sem prosa vaga):
+   (a) SUBJECT — sujeito principal com características físicas, vestuário, expressão e ação concretos; nos slides 1, 4, 5 e 7 o "sujeito" é a própria foto de referência, intocada (ver regra 2);
+   (b) ENVIRONMENT / SETTING — cenário, atmosfera, elementos contextuais e profundidade de campo;
+   (c) ART STYLE & MEDIUM — meio e óptica concretos: fotografia (ex.: "35mm lens, f/1.8"), render 3D (ex.: "Unreal Engine 5 render, Octane render") ou arte gráfica; sempre coerente com o padrão visual da marca;
+   (d) LIGHTING & COLOR — tipo de luz (ex.: "golden hour light", "soft diffused daylight", "volumetric lighting") e paleta dominante com os hexes da marca;
+   (e) COMPOSITION — enquadramento (ex.: "wide shot", "close-up", "rule of thirds", "low angle", "1:1 safe zone centered").
+15. ⛔ BUZZWORDS GENÉRICAS (filtro de qualidade): não use "photorealistic", "4K", "hyperrealistic", "ultra detailed", "high quality", "masterpiece" nem advérbios vazios como atalho de estilo — no lugar, descreva textura, iluminação e óptica concretas. Exceção única: as cláusulas FRASE_FOTO_REAL e FRASE_FACHADA, transcritas literalmente, mantêm o termo "photorealistic" porque ali ele significa "foto intocada", não estilo.
+16. Se o estilo não vier definido pelo padrão visual, adote o que melhor valoriza o conceito: fotografia para cenas reais da unidade e arte gráfica/editorial para diagramas e cards — nunca uma estética genérica de banco de imagens."""
     + """
 
 Retorne JSON:
@@ -828,7 +1162,7 @@ PROMPT_LEGENDAS = """Com base no carrossel abaixo, escreva 3 OPÇÕES DE LEGENDA
 3. Emojis com parcimônia apenas como marcadores visuais funcionais (📌 💡 🎯 🚀)
 4. SEO local: mencionar 'Tatuapé', 'Jardim Anália Franco' ou 'apoio escolar' de forma 100% orgânica
 5. CTA DUPLO OBRIGATÓRIO:
-   • Conversão: palavra-chave EXATA do carrossel nos comentários + WhatsApp (11) 94475-0009
+   • Conversão: palavra-chave EXATA do carrossel nos comentários + chamada para entrar em contato via WhatsApp (11) 94475-0009 oferecendo aula experimental gratuita (em posts de tecnologia) ou avaliação pedagógica gratuita (em posts de apoio escolar)
    • Alavanca Orgânica: incentivo a compartilhar por Direct ('Envie para quem divide a rotina de estudos com você') ou salvar para consultar nas provas
 6. Extensão: 800-1.400 caracteres
 7. Hashtags: 5-7 focadas (#EnsinaMaisTatuapé #ApoioEscolarTatuapé #ReforçoEscolarTatuapé #MãesDoTatuapé #AnáliaFranco #EducaçãoTatuapé)
@@ -870,12 +1204,12 @@ Com base no carrossel e no roteiro de slides abaixo, monte a REQUISIÇÃO COMPLE
    • language: "Português (Brasil)"
    • duracao: "~60 segundos, vertical 9:16"
    • visual_style: escolha UMA opção que combine com o tema (Classic / Whiteboard / Watercolor / Kawaii / Anime / Retro Print / Paper-craft / Heritage / Custom). Se for Custom, descreva o estilo.
-2. STEERING PROMPT (o texto de foco, em PT-BR, que o usuário cola no campo de customização): instrua o vídeo a (a) apresentar o tema central em ~60s, (b) seguir a MESMA sequência lógica dos slides do roteiro, (c) abrir com o hook da capa, (d) terminar com o CTA (palavra-chave + WhatsApp (11) 94475-0009), (e) usar tom empático "de mãe pra mãe", sem jargão.
+2. STEERING PROMPT (o texto de foco, em PT-BR, que o usuário cola no campo de customização): instrua o vídeo a (a) apresentar o tema central em ~60s, (b) seguir a MESMA sequência lógica dos slides do roteiro, (c) abrir com o hook da capa, (d) terminar com o CTA (palavra-chave + contato via WhatsApp (11) 94475-0009 oferecendo aula experimental para tecnologia ou avaliação pedagógica para apoio escolar), (e) usar tom empático "de mãe pra mãe", sem jargão.
 3. NARRATIVA (resumo do que o Short deve contar): 4-6 frases conectando o hook → desenvolvimento → ponte para a unidade → CTA, FIÉIS ao roteiro.
 
 ─── REGRAS INVIOLÁVEIS ───
 • Fidelidade: o tema e a mensagem DEVEM refletir o roteiro dos slides, sem adicionar afirmações que não estejam nele.
-• CTA final SEMPRE com WhatsApp (11) 94475-0009.
+• CTA final SEMPRE oferecendo aula experimental (em posts de tecnologia) ou avaliação pedagógica (em posts de apoio escolar) e contato via WhatsApp (11) 94475-0009.
 • Personagens da Turma da Mônica: NUNCA mencione — o logo oficial e o painel real da fachada são permitidos (regra dupla).
 • Idioma de narração e texto: Português do Brasil.
 

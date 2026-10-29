@@ -176,7 +176,12 @@ def test_feedback_loop_ignora_metricas_sem_titulo(monkeypatch):
 
     lixo = [{"data": "", "titulo": "", "alcance": 0, "taxa_salvamentos": 0.0}] * 280
     monkeypatch.setattr(pers, "load_metricas", lambda: lixo)
-    assert p.build_ideas_prompt_with_feedback() == p.PROMPT_IDEIAS_BASE
+    prompt = p.build_ideas_prompt_with_feedback()
+    assert "FEEDBACK DE PERFORMANCE" not in prompt
+    # O prompt agora carrega também o bloco de voz, então a igualdade com a
+    # base isolada não vale mais — o que precisa continuar verdadeiro é que a
+    # base está inteira lá dentro.
+    assert prompt.startswith(p.PROMPT_IDEIAS_BASE)
 
 
 def test_feedback_loop_ativo_com_metricas_reais(monkeypatch):
@@ -202,4 +207,6 @@ def test_feedback_loop_morto_sem_metricas(monkeypatch):
     import persistence as pers
     import prompts as p
     monkeypatch.setattr(pers, "load_metricas", lambda: [])
-    assert p.build_ideas_prompt_with_feedback() == p.PROMPT_IDEIAS_BASE
+    prompt = p.build_ideas_prompt_with_feedback()
+    assert "FEEDBACK DE PERFORMANCE" not in prompt
+    assert prompt.startswith(p.PROMPT_IDEIAS_BASE)

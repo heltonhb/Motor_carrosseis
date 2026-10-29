@@ -5,9 +5,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from batch_engine import _FRASE_TAG, _enforce_foto_real
+from batch_engine import (
+    _CLAUSULAS_DO_MOTOR,
+    _FRASE_TAG,
+    _dedup_frases,
+    _enforce_foto_real,
+    _garantir_regras,
+    _limite_overlay,
+)
 from config import TAG_NAVEGACAO
-from prompts import FRASE_FOTO_REAL
+from prompts import FRASE_FACHADA, FRASE_FOTO_REAL
 from refs_catalog import CENAS_FOTO, cena_valida
 
 
@@ -434,3 +441,164 @@ def test_personagem_marca_do_logo_permitida():
     pen = _enforce_foto_real(dados, corrigidos=corrigidos)["slides"][0]["prompt_en"]
     assert "Turma da Mônica" in pen
     assert not any("personagem removido" in c for c in corrigidos)
+
+
+# ═══ Deduplicação de instruções repetidas (V9, achado na demo real) ══════════
+
+def test_frases_iguais_uma_so_vez():
+    de = "Compose ONLY design elements on top. "
+    texto = de + de + "No cartoon characters."
+    saida, removidas = _dedup_frases(texto)
+    assert saida.count("Compose ONLY design elements") == 1
+    assert len(removidas) == 1
+
+
+def test_parafrase_e_removida_e_a_clausula_do_motor_sobrevive():
+    # O caso real: o Gemini reescreveu a instrução da foto intocável e a regra 12
+    # anexou a versão canônica por cima. Sobravam duas quase iguais.
+    parafrase = (
+        "Use the provided reference photo of the school facade exactly as-is as "
+        "the full-bleed background -- do not regenerate, redraw, restyle, recolor."
+    )
+    texto = parafrase + " " + FRASE_FACHADA
+    saida, removidas = _dedup_frases(texto, preferidos=_CLAUSULAS_DO_MOTOR)
+    assert saida == FRASE_FACHADA
+    assert len(removidas) == 1
+
+
+def test_clausula_do_motor_quebrada_em_frases_continua_protegida():
+    # A cláusula da fachada são três frases: sem proteção de bloco, a dedup a
+    # desmontava e o validador depois reprovava o slide.
+    texto = "Compose ONLY design elements on top: overlays. " + FRASE_FACHADA
+    saida, _ = _dedup_frases(texto, preferidos=_CLAUSULAS_DO_MOTOR)
+    assert FRASE_FACHADA in saida
+    # a variante do modelo sai; a da cláusula do motor permanece (ela própria
+    # contém "Compose ONLY design elements", então o teste mira o final da frase)
+    assert "top: overlays" not in saida
+
+
+def test_parafrase_nao_some_quando_a_clausula_do_motor_nao_esta_no_prompt():
+    # Regressão: a dedup apagava a instrução do modelo de slides que não tinham
+    # a cláusula do motor, deixando o slide sem regra nenhuma.
+    parafrase = (
+        "Use the provided reference photo of the school facade exactly as-is as "
+        "the full-bleed background -- do not regenerate or restyle."
+    )
+    saida, _ = _dedup_frases(parafrase, preferidos=_CLAUSULAS_DO_MOTOR)
+    assert parafrase in saida
+
+
+def test_frases_distintas_sobrevem():
+    texto = (
+        "Bold Brand Blue #007799 text overlay in Brazilian Portuguese: 'x'. "
+        "No cartoon characters. "
+        "In the bottom right corner, a small discreet text says 'Mova'."
+    )
+    saida, removidas = _dedup_frases(texto, preferidos=_CLAUSULAS_DO_MOTOR)
+    assert removidas == []
+    assert saida == texto
+
+
+def test_clausula_curta_nao_e_protegida_como_bloco():
+    # Regressão: "no cartoon characters" é um fragmento curto. Protegido como
+    # bloco, ele virava marcador no meio da frase e a dedup descartava o resto —
+    # apagando a própria cláusula do motor do prompt.
+    from batch_engine import _proteger_blocos
+    from prompts import CLAUSULA_SEM_PERSONAGENS
+
+    texto = "Clean layout. No cartoon characters, generic minimalist icons only."
+    protegido, blocos = _proteger_blocos(texto, (CLAUSULA_SEM_PERSONAGENS,))
+    assert CLAUSULA_SEM_PERSONAGENS in protegido.lower()
+    assert blocos == []
+
+
+def test_regra_7_sobrevive_a_dedup_no_slide_real():
+    # Payloads reais trazem a cláusula em ordem e formato diferentes; a regra 7
+    # precisa continuar presente depois de todas as passadas.
+    slide = {
+        "slide_num": 3,
+        "prompt_en": (
+            "Educational delivery slide with soft off-white #F7F9FF background, "
+            "pastel blue card #E0F2FE, rounded corners 16px. "
+            "text overlay in Brazilian Portuguese: '1) Identifique se o erro foi de "
+            "conceito ou de desatenção. Separe o erro de cálculo do branco na "
+            "teoria.'. In the bottom right corner, a small discreet text in "
+            "Brazilian Portuguese says 'Mova para o próximo ➔'."
+        ),
+        "text_overlay": "1) Identifique se o erro foi de conceito ou de desatenção.",
+        "prompt_pt": "Entrega",
+        "referencias": [],
+    }
+    _garantir_regras(slide, None)
+    assert "no cartoon characters" in slide["prompt_en"].lower()
+    assert slide["prompt_en"].rstrip().endswith("Mova para o próximo ➔'.")
+
+
+# ═══ Regra 4 — o overlay é cortado, não só avisado ══════════════════════════
+
+def test_overlay_longo_dentro_do_limite():
+    from batch_engine import MAX_PALAVRAS_OVERLAY, _cortar_overlay
+    texto = " ".join(f"palavra{i}" for i in range(20))
+    cortado, mudou = _cortar_overlay(texto, MAX_PALAVRAS_OVERLAY)
+    assert mudou
+    assert len(cortado.split()) <= MAX_PALAVRAS_OVERLAY
+
+
+def test_overlay_dentro_do_limite_nao_e_tocado():
+    from batch_engine import MAX_PALAVRAS_OVERLAY, _cortar_overlay
+    texto = "A prova voltou vermelha."
+    assert _cortar_overlay(texto, MAX_PALAVRAS_OVERLAY) == (texto, False)
+
+
+def test_corte_prefere_frase_inteira_a_fracao_de_palavra():
+    from batch_engine import _cortar_overlay
+    texto = "Primeira frase completa. Segunda frase que é bem maior que o limite."
+    cortado, _ = _cortar_overlay(texto, 8)
+    assert cortado == "Primeira frase completa."
+
+
+def test_corte_recua_ate_a_virgula_em_vez_de_quebrar_no_meio():
+    # Sem recuo, saía "a criança associa o erro a…" — que lê como erro de escrita.
+    from batch_engine import _cortar_overlay
+    texto = "Quando a nota baixa é recebida como falha pessoal, a criança associa o erro a uma ameaça."
+    cortado, _ = _cortar_overlay(texto, 9)
+    assert cortado == "Quando a nota baixa é recebida como falha pessoal,"
+    assert not cortado.endswith("…")
+
+
+def test_thumbnail_tem_limite_mais_apertado():
+    slide = {"slide_num": 1, "prompt_en": "", "text_overlay": ""}
+    assert _limite_overlay(1) == 8
+    assert _limite_overlay(3) == 15
+
+
+def test_overlay_curto_no_slide_fica_intacto_no_prompt():
+    slide = {
+        "slide_num": 3,
+        "prompt_en": (
+            "Educational slide with soft background #F7F9FF. "
+            "In the bottom right corner, a small discreet text in Brazilian "
+            "Portuguese says 'Mova para o próximo ➔'."
+        ),
+        "text_overlay": "1) Separe o erro de cálculo do erro de conceito.",
+        "prompt_pt": "Entrega",
+        "referencias": [],
+    }
+    _garantir_regras(slide, None)
+    assert slide["text_overlay"] == "1) Separe o erro de cálculo do erro de conceito."
+    assert "no cartoon characters" in slide["prompt_en"].lower()
+
+
+def test_overlay_longo_e_registrado_nas_correcoes():
+    slide = {
+        "slide_num": 2,
+        "prompt_en": "Clean slide. In the bottom right corner, a small discreet text "
+                     "in Brazilian Portuguese says 'Mova para o próximo ➔'.",
+        "text_overlay": " ".join(f"palavra{i}" for i in range(19)),
+        "prompt_pt": "Segunda capa",
+        "referencias": [],
+    }
+    corrigidos: list[str] = []
+    _garantir_regras(slide, corrigidos)
+    assert len(slide["text_overlay"].split()) <= 15
+    assert any("encurtado" in c for c in corrigidos), "corte de texto tem que ser visível"

@@ -2,7 +2,7 @@
 A identidade equilibra credibilidade pedagógica com elementos vibrantes e acolhedores voltados ao público infantil e às famílias:
 
 Azul Principal / Brand (#007799 / #0084B4): Transmite confiança, seriedade acadêmica e segurança para os pais. Utilizado em barras de destaque, títulos principais e fundos contrastantes.
-Verde Ação / Matrícula (#58B947 / #68C03F): Cor prioritária de conversão (CTAs como "Agende uma aula experimental gratuita", botões de contato e confirmação).
+Verde Ação / Matrícula (#58B947 / #68C03F): Cor prioritária de conversão (CTAs como "Agende uma aula experimental gratuita" em tecnologia ou "Agende uma avaliação pedagógica gratuita" em apoio escolar, botões de contato e confirmação).
 Laranja / Amarelo Vibrante (#F58220 / #FFC20E): Traz energia, calor e entusiasmo infantil, usado em badges (Robótica Educacional), destaques com marca-texto e cards temáticos.
 Tons Pastel de Apoio (Cards Disciplinares — um por curso do portfólio oficial):
 Azul claro (#E0F2FE) para Apoio Escolar — Matemática

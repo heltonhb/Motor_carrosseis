@@ -9,10 +9,10 @@ from io import BytesIO
 
 import streamlit as st
 
-from tabs._ui import api_key_ok, clipboard_button, empty_state, render_schedule_day
 from batch_engine import normalizar_prompts, processar_lote
 from persistence import save_geracao
 from prompts import formatar_txt_prompts, validate_prompts
+from tabs._ui import api_key_ok, clipboard_button, empty_state, render_schedule_day, seletor_fidelidade
 
 
 def render() -> None:
@@ -34,6 +34,8 @@ def render() -> None:
         with c3:
             fazer_cronograma = st.checkbox("📅 Cronograma",              value=True)
 
+        fidelidade = seletor_fidelidade("fidelidade_lote")
+
         if st.button("🚀 Processar Tudo em Lote", type="primary", width="stretch"):
             if not api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
@@ -52,6 +54,7 @@ def render() -> None:
                     fazer_cronograma=fazer_cronograma,
                     forcar=True,
                     on_progress=_update_progress,
+                    fidelidade=fidelidade,
                 )
                 # Persistir cronograma (mesmo comportamento de antes)
                 if fazer_cronograma and "cronograma" in results:

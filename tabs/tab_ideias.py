@@ -23,10 +23,12 @@ from prompts import (
     get_prompt_ideias,
     validate_idea_diversity,
 )
-from tabs._ui import api_key_ok, esc
+from tabs._ui import api_key_ok, esc, seletor_tom
+
 _esc = esc  # alias used in card rendering
-from templates import TEMPLATES
 from datetime import datetime
+
+from templates import TEMPLATES
 
 
 def _ensure_idea_ids(ideias: list[dict], origem: str = "") -> list[dict]:
@@ -192,6 +194,7 @@ def _render_idea_card(idea: dict, idx: int) -> None:
 def render():
     """Renderiza a aba de Ideias."""
     st.markdown("## 💡 Gerador de Ideias de Carrossel")
+    tom = seletor_tom("tom_selecionado_ideias")
 
     # Templates pré-definidos
     st.markdown("### 📋 Templates Pré-definidos")
@@ -217,7 +220,7 @@ def render():
             else:
                 ctx = f"Template: {tpl['nome']}\nEixo: {tpl['eixo']}\nTema: {custom_tema}\nCTA: {custom_cta}"
                 with st.spinner("🤖 Gerando ideias com template…"):
-                    dados = call_gemini_json(get_prompt_ideias(), ctx, temperature=TEMPERATURAS["ideias"])
+                    dados = call_gemini_json(get_prompt_ideias(tom), ctx, temperature=TEMPERATURAS["ideias"])
                     if dados:
                         _ensure_idea_ids(dados.get("ideias", []), "template")
                         st.session_state["ideias"] = dados
@@ -241,7 +244,7 @@ def render():
             if not ideias_formatadas and api_key_ok() and len(nb_result.strip()) > 100:
                 with st.spinner("🤖 Estruturando ideias do notebook com Gemini..."):
                     ctx = f"Estruture as seguintes notas e ideias vindas do NotebookLM em carrosséis completos de 8 slides para o Instagram da unidade:\n\n{nb_result}"
-                    dados = call_gemini_json(get_prompt_ideias(), ctx, temperature=TEMPERATURAS["ideias"])
+                    dados = call_gemini_json(get_prompt_ideias(tom), ctx, temperature=TEMPERATURAS["ideias"])
                     if dados and isinstance(dados, dict) and "ideias" in dados:
                         ideias_formatadas = [i for i in dados["ideias"] if not is_guideline_noise(i.get("titulo", ""))]
 
@@ -303,7 +306,7 @@ def render():
             gerar_ideias_btn = st.button("🎲 Gerar Ideias", type="primary", width="stretch")
         with col_nova:
             if st.button("🔄 Forçar novas", width="stretch", help="Ignora o cache e gera ideias novas"):
-                invalidate_cache(get_prompt_ideias())
+                invalidate_cache(get_prompt_ideias(tom))
                 st.session_state.pop("ideias", None)
                 st.rerun()
 
@@ -311,7 +314,7 @@ def render():
         if not api_key_ok():
             st.warning("⚠️ Configure a chave API Gemini.")
         else:
-            invalidate_cache(get_prompt_ideias())
+            invalidate_cache(get_prompt_ideias(tom))
             ctx = st.session_state.get("nb_contexto_para_ideias", "")
             if not ctx:
                 ctx = st.session_state.get(
@@ -319,7 +322,7 @@ def render():
                     "Sem dados de tendências. Gere ideias gerais para Tatuapé, SP.",
                 )
             with st.spinner("🤖 Gerando 6 ideias estratégicas de alta retenção…"):
-                dados = call_gemini_json(get_prompt_ideias(), f"Tendências:\n{ctx}", temperature=TEMPERATURAS["ideias"])
+                dados = call_gemini_json(get_prompt_ideias(tom), f"Tendências:\n{ctx}", temperature=TEMPERATURAS["ideias"])
                 if dados:
                     _ensure_idea_ids(dados.get("ideias", []), "gemini")
                     st.session_state["ideias"] = dados

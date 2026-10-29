@@ -52,34 +52,36 @@ TAG_NAVEGACAO = "Mova para o próximo ➔"
 # false (padrão) a geração é só texto — mais barata e igualmente válida.
 FLOW_FOTOS = os.environ.get("FLOW_FOTOS", "false").strip().lower() in {"1", "true", "yes", "on"}
 
-# ─── Paleta de Cores Institucional ──────────────────────────────────────────
+# ─── Paleta de Cores Institucional (Alinhada com Google Stitch MCP) ───────────
 CORES = {
-    "primaria": "#6C8CFF",        # Azul brilhante — cor principal
-    "secundaria": "#34D399",      # Verde suave — apenas estados positivos
-    "destaque": "#818CF8",        # Índigo — acentos e links
-    "perigo": "#F87171",          # Vermelho — erros e avisos
-    "aviso": "#FBBF24",           # Âmbar — avisos leves
-    "fundo": "#0A0A0F",           # Fundo escuro profundo
-    "fundo_sec": "#111118",       # Fundo secundário
-    "texto": "#E8E8ED",           # Texto principal — branco suave
-    "texto_sec": "#8B8B9E",       # Texto secundário — cinza médio
-    "borda": "#2A2A3C",           # Bordas discretas
-    "card_bg": "#141420",         # Cards
-    # UI do app (tema dark)
-    "app_bg": "#0A0A0F",
-    "app_card": "#141420",
-    "app_card2": "#1A1A2E",
-    "app_borda": "#2A2A3C",
-    "app_texto_muted": "#8B8B9E",
-    "app_sombra": "0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3)",
-    "app_sombra_hover": "0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3)",
+    "primaria": "#2463eb",        # Azul Royal — destaque e ação principal (Google Stitch)
+    "secundaria": "#76BC21",      # Verde Ação — conversão, CTA WhatsApp e aprovação
+    "destaque": "#007799",        # Turquesa/Ciano Institucional Ensina Mais
+    "perigo": "#F87171",          # Vermelho suave — erros e avisos
+    "aviso": "#FBBF24",           # Âmbar — avisos leves e revisão
+    "fundo": "#09090b",           # Fundo escuro profundo (Dark Zinc 950)
+    "fundo_sec": "#121217",       # Fundo secundário
+    "texto": "#F8FAFC",           # Texto principal — branco suave
+    "texto_sec": "#94A3B8",       # Texto secundário — slate 400
+    "borda": "rgba(255, 255, 255, 0.08)", # Bordas sutis glass
+    "borda_forte": "#272732",     # Bordas de separação
+    "card_bg": "rgba(24, 24, 31, 0.75)", # Cards com glassmorphism
+    # UI do app (tema dark zinc)
+    "app_bg": "#09090b",
+    "app_card": "rgba(24, 24, 31, 0.75)",
+    "app_card2": "#18181f",
+    "app_borda": "rgba(255, 255, 255, 0.08)",
+    "app_texto_muted": "#94A3B8",
+    "app_sombra": "0 4px 14px -2px rgba(0, 0, 0, 0.5), 0 2px 6px -1px rgba(0, 0, 0, 0.3)",
+    "app_sombra_hover": "0 10px 25px -3px rgba(36, 99, 235, 0.25), 0 4px 10px -2px rgba(0, 0, 0, 0.4)",
     # Radiação / glows para o hero e estados premium
-    "glow_primaria": "rgba(108, 140, 255, 0.25)",
-    "glow_secundaria": "rgba(52, 211, 153, 0.20)",
-    "gradiente_hero": "radial-gradient(1200px 400px at 20% -10%, rgba(108,140,255,0.22), transparent 60%), radial-gradient(900px 300px at 90% 0%, rgba(129,140,248,0.16), transparent 55%)",
-    "gradiente_texto": "linear-gradient(100deg, #8AA4FF 0%, #6C8CFF 45%, #818CF8 100%)",
+    "glow_primaria": "rgba(36, 99, 235, 0.35)",
+    "glow_secundaria": "rgba(118, 188, 33, 0.30)",
+    "glow_destaque": "rgba(0, 119, 153, 0.30)",
+    "gradiente_hero": "radial-gradient(1200px 400px at 20% -10%, rgba(36, 99, 235, 0.22), transparent 60%), radial-gradient(900px 300px at 90% 0%, rgba(0, 119, 153, 0.18), transparent 55%)",
+    "gradiente_texto": "linear-gradient(100deg, #60A5FA 0%, #2463eb 50%, #007799 100%)",
     "raio_card": "16px",
-    "raio_controle": "10px",
+    "raio_controle": "12px",
 }
 
 # ─── Design tokens do hero / stats (usados no cabeçalho premium) ─────────────
@@ -153,6 +155,28 @@ EIXOS = {
     },
 }
 
+# ─── Tons de voz (ghostwriter) ─────────────────────────────────────────────────
+# A persona CAROL define QUEM fala; o tom define COMO ela fala neste carrossel.
+# Dois carrosséis do mesmo eixo escritos com o mesmo tom soam iguais — variar o
+# tom é o jeito mais barato de o feed não ficar com cara de template.
+TONES = {
+    "automatico": "Automático (o eixo do carrossel decide)",
+    "natural": "Natural — mãe falando com mãe",
+    "didatico": "Didático — o professor explica o passo",
+    "storyteller": "Storyteller — cena concreta que vira insight",
+    "especialista": "Especialista — voz de quem domina o tema",
+    "viral": "Viral — gancho forte e entrega rápida",
+}
+TONES_PADRAO = "automatico"
+
+# Fallback do tom "automatico": cada eixo puxa o registro que melhor converte
+# nele. Mesma lógica do KPI alvo em EIXOS.
+TONES_POR_EIXO = {
+    "Didático": "didatico",
+    "Comportamental": "storyteller",
+    "Diagnóstico": "especialista",
+}
+
 # ─── Diretório de dados persistidos ─────────────────────────────────────────
 PROJECT_DIR = Path(__file__).resolve().parent
 DATA_DIR = str(PROJECT_DIR / "data")
@@ -160,6 +184,8 @@ METRICAS_FILE = str(PROJECT_DIR / "data" / "metricas.json")
 HISTORICO_FILE = str(PROJECT_DIR / "data" / "historico_geracoes.json")
 IDEIAS_ESTADO_FILE = str(PROJECT_DIR / "data" / "ideias_estado.json")
 SQLITE_FILE = str(PROJECT_DIR / "data" / "motor_carrosseis.sqlite3")
+BRIEF_FILE = str(PROJECT_DIR / "data" / "brief.json")
+STORYBOARD_FILE = str(PROJECT_DIR / "data" / "storyboard.json")
 
 # ─── Configurações do NotebookLM ─────────────────────────────────────────────
 NOTEBOOK_ID_PADRAO = "7f415de3-0f02-4eb9-b5f1-3d104a00354a"

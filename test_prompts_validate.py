@@ -1,5 +1,8 @@
 """Testes do validador de prompts de imagem (validate_prompts)."""
 
+import pytest
+
+import prompts
 from config import TAG_NAVEGACAO
 from prompts import FRASE_FACHADA, FRASE_FOTO_REAL, validate_prompts
 
@@ -434,3 +437,137 @@ def test_formatar_txt_prompts_payload_invalido():
     from prompts import formatar_txt_prompts
     assert formatar_txt_prompts({}) == ""
     assert formatar_txt_prompts(None) == ""  # type: ignore[arg-type]
+
+
+# ─── CTA Slide Final: Aula experimental (Tecnologia) vs Avaliação Pedagógica (Apoio) ──
+
+def test_cta_regras_em_todos_os_prompts():
+    from prompts import (
+        PROMPT_IDEIAS_BASE,
+        PROMPT_LEGENDAS,
+        PROMPT_PROMPTS_IMAGEM,
+        PROMPT_VIDEO_CURTO,
+        SYSTEM_INSTRUCTION_PERSONA,
+    )
+
+    for nome, prompt_text in (
+        ("persona", SYSTEM_INSTRUCTION_PERSONA),
+        ("ideias", PROMPT_IDEIAS_BASE),
+        ("imagem", PROMPT_PROMPTS_IMAGEM),
+        ("legendas", PROMPT_LEGENDAS),
+        ("video", PROMPT_VIDEO_CURTO),
+    ):
+        assert "aula experimental" in prompt_text.lower(), f"'aula experimental' ausente em {nome}"
+        assert "avaliação pedagógica" in prompt_text.lower(), f"'avaliação pedagógica' ausente em {nome}"
+        assert "94475-0009" in prompt_text, f"WhatsApp ausente em {nome}"
+
+
+def test_validate_prompts_cta_oferta_condicional():
+    p = _payload_valido()
+    ideia_tec = {
+        "titulo": "Robótica e Lógica",
+        "tema": "Robótica Educacional",
+        "curso": "Tecnologia — Robótica",
+        "slides_sugeridos": [{"slide": i + 1, "tipo": "Capa", "texto": s["text_overlay"]} for i, s in enumerate(p["slides"])],
+    }
+    # Payload válido padrão tem text_overlay "Comente HARMONIA ou chame no WhatsApp (11) 94475-0009" (sem aula experimental)
+    avisos = validate_prompts(p, ideia_tec)
+    assert any("aula experimental" in a for a in avisos)
+
+    # Ajusta para ter aula experimental no CTA
+    p["slides"][-1]["text_overlay"] = "Aula experimental gratuita: WhatsApp (11) 94475-0009"
+    p["slides"][-1]["prompt_en"] = (
+        "CTA slide with Action Green pill button. text overlay in Brazilian Portuguese: "
+        "'Aula experimental gratuita: WhatsApp (11) 94475-0009'. No cartoon characters."
+    )
+    ideia_tec["slides_sugeridos"][-1]["texto"] = "Aula experimental gratuita: WhatsApp (11) 94475-0009"
+    avisos_corrigidos = validate_prompts(p, ideia_tec)
+    assert not any("aula experimental" in a for a in avisos_corrigidos)
+
+
+def test_validate_idea_diversity_cta_oferta():
+    from prompts import validate_idea_diversity
+
+    ideias = [
+        {
+            "titulo": "Lógica com Robótica",
+            "tema": "Robótica",
+            "curso": "Tecnologia — Robótica",
+            "tipo_hook": "pergunta",
+            "slides_sugeridos": [
+                {"slide": 1, "tipo": "Capa", "texto": "Seu filho sabe lógica?"},
+                {"slide": 8, "tipo": "CTA", "texto": "Chame no WhatsApp (11) 94475-0009 para agendar uma aula experimental"},
+            ],
+        },
+        {
+            "titulo": "Matemática sem medo",
+            "tema": "Apoio em Matemática",
+            "curso": "Apoio Escolar — Matemática",
+            "tipo_hook": "paradoxo",
+            "slides_sugeridos": [
+                {"slide": 1, "tipo": "Capa", "texto": "A ilusão da conta rápida"},
+                {"slide": 8, "tipo": "CTA", "texto": "Chame no WhatsApp (11) 94475-0009 para agendar uma avaliação pedagógica"},
+            ],
+        },
+    ]
+    warnings = validate_idea_diversity(ideias)
+    assert not any("oferta correta" in w for w in warnings)
+
+    # Agora faz ideia de apoio escolar sem a avaliação pedagógica
+    ideias[1]["slides_sugeridos"][1]["texto"] = "Chame no WhatsApp (11) 94475-0009 para saber mais"
+    warnings_err = validate_idea_diversity(ideias)
+    assert any("oferta correta" in w for w in warnings_err)
+
+
+
+# ═══ Regra 3b — número com cara de dado precisa de fonte ════════════════════
+# Achado na geração real: "Irritação na lição de casa caiu 80% após 30 dias" sem
+# fonte nenhuma. A persona proibia inventar depoimento, não estatística.
+
+@pytest.mark.parametrize("texto", [
+    "Irritação na lição de casa caiu 80% após 30 dias.",
+    "A taxa de erro triplicou: 3x mais erros.",
+    "Mais de 2 mil alunos em 10 anos de unidade.",
+])
+def test_validador_aponta_numero_sem_fonte(texto):
+    from prompts import numeros_sem_fonte
+    assert numeros_sem_fonte(texto)
+
+
+@pytest.mark.parametrize("texto", [
+    "A média caiu 20%, segundo o INEP.",
+    "Pesquisa da USP mostra melhora em 15%.",
+    "Na nossa sala, a irritação aparece toda semana.",
+    "Ele errou 5 questões e levou 2 na prova",     # número é conteúdo, não dado
+    "A turma do 4º ano B",                          # número é nome, não dado
+])
+def test_validador_accepta_fonte_ou_observacao(texto):
+    from prompts import numeros_sem_fonte
+    assert numeros_sem_fonte(texto) == []
+
+
+def test_regra_3b_esta_no_system_instruction():
+    assert "3b." in prompts.SYSTEM_INSTRUCTION_PERSONA
+    assert "SEM NÚMERO" in prompts.SYSTEM_INSTRUCTION_PERSONA
+
+
+def test_aviso_3b_aparece_na_validacao_do_payload_real():
+    payload = {
+        "slides": [{
+            "slide_num": 7,
+            "prompt_en": FRASE_FACHADA + " text overlay in Brazilian Portuguese: 'caiu 80%'. "
+                        "no cartoon characters. In the bottom right corner, a small discreet text "
+                        "in Brazilian Portuguese says 'Mova para o próximo ➔'.",
+            "prompt_pt": "Prova social",
+            "text_overlay": "Irritação na lição de casa caiu 80% após 30 dias.",
+            "estilo": "prova",
+            "usa_foto_real": True,
+            "tipo_foto": "fachada",
+            "referencias": ["fachada"],
+            "tag_navegacao": "Mova para o próximo ➔",
+        }],
+        "paleta_cores": {"primaria": "#007799"},
+        "base_prompt": "Base",
+    }
+    avisos = validate_prompts(payload)
+    assert any("regra 3b" in a for a in avisos)

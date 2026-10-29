@@ -58,93 +58,86 @@ if "_synced" not in st.session_state:
 
 
 # ─── CSS customizado ────────────────────────────────────────────────────────
-st.markdown(f"""
+st.html(f"""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
-    /* ═══ Base ═══ */
+    /* ═══ Base & Background (Google Stitch Dark Zinc) ═══ */
     .stApp {{
         background-color: {CORES['app_bg']};
-        font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        color: {CORES['texto']};
     }}
     .main .block-container {{
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-        max-width: 1200px;
+        padding-top: 1.25rem;
+        padding-bottom: 2.5rem;
+        max-width: 1400px;
     }}
 
-    /* ═══ Hero header ═══ */
-    .hero {{
-        position: relative;
-        background: {CORES['gradiente_hero']};
-        border: 1px solid {CORES['borda']};
+    /* ═══ Glass Panels & Cards ═══ */
+    .glass-panel {{
+        background: rgba(24, 24, 31, 0.72);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.07);
         border-radius: {CORES['raio_card']};
-        padding: 28px 32px;
-        margin-bottom: 18px;
-        overflow: hidden;
     }}
-    .hero::after {{
-        content: "";
-        position: absolute;
-        top: -60px; right: -40px;
-        width: 240px; height: 240px;
-        background: {CORES['glow_primaria']};
-        filter: blur(60px);
-        border-radius: 50%;
-        pointer-events: none;
+
+    .glass-card {{
+        background: rgba(28, 28, 37, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
     }}
-    .hero-inner {{ position: relative; z-index: 1; }}
-    .hero-badge {{
-        display: inline-flex;
+
+    /* ═══ Top Header Stitch ═══ */
+    .stitch-header {{
+        background: rgba(18, 18, 23, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: {CORES['raio_card']};
+        padding: 16px 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+    }}
+
+    .stitch-kpi-card {{
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 8px 14px;
+        display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 5px 14px;
-        border-radius: 999px;
-        background: rgba(108, 140, 255, 0.14);
-        color: {CORES['primaria']};
-        border: 1px solid rgba(108, 140, 255, 0.30);
-        font-size: 0.78em;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-        margin-bottom: 12px;
+        gap: 12px;
+        transition: all 0.2s ease;
     }}
-    .hero-title {{
-        font-size: 2.1rem !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.03em !important;
-        line-height: 1.15 !important;
-        margin: 0 0 6px 0 !important;
-        background: {CORES['gradiente_texto']};
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        color: transparent !important;
-    }}
-    .hero-subtitle {{
-        color: {CORES['texto_sec']} !important;
-        font-size: 0.98em;
-        margin: 0;
-        line-height: 1.5;
+    .stitch-kpi-card:hover {{
+        border-color: rgba(36, 99, 235, 0.4);
+        background: rgba(15, 23, 42, 0.85);
+        transform: translateY(-1px);
     }}
 
     /* ═══ Empty state ═══ */
     .empty-state {{
         text-align: center;
-        padding: 40px 24px;
-        background: {CORES['app_card']};
-        border: 1px dashed {CORES['borda']};
+        padding: 44px 24px;
+        background: rgba(24, 24, 31, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px dashed rgba(255, 255, 255, 0.12);
         border-radius: {CORES['raio_card']};
-        margin: 12px 0;
+        margin: 14px 0;
     }}
     .empty-icon {{
-        font-size: 2.2rem;
-        margin-bottom: 10px;
+        font-size: 2.4rem;
+        margin-bottom: 12px;
         animation: float 3s ease-in-out infinite;
     }}
-    .empty-title {{ font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }}
-    .empty-desc {{ font-size: 0.88em; line-height: 1.5; max-width: 460px; margin: 0 auto; }}
+    .empty-title {{ font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }}
+    .empty-desc {{ font-size: 0.9em; line-height: 1.55; max-width: 480px; margin: 0 auto; color: {CORES['texto_sec']}; }}
     @keyframes float {{
         0%, 100% {{ transform: translateY(0); }}
         50% {{ transform: translateY(-6px); }}
@@ -152,105 +145,105 @@ st.markdown(f"""
 
     /* ═══ Tipografia ═══ */
     h1, h2, h3, h4, h5, h6 {{
-        color: {CORES['texto']} !important;
-        font-family: 'Geist', sans-serif !important;
+        color: #FFFFFF !important;
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
         font-weight: 700 !important;
         letter-spacing: -0.02em !important;
         line-height: 1.3;
     }}
-    h1 {{ font-size: 1.8rem !important; margin-bottom: 0.5rem !important; }}
-    h2 {{ font-size: 1.4rem !important; margin-bottom: 0.4rem !important; }}
-    h3 {{ font-size: 1.15rem !important; margin-bottom: 0.3rem !important; }}
+    h1 {{ font-size: 1.85rem !important; margin-bottom: 0.5rem !important; }}
+    h2 {{ font-size: 1.45rem !important; margin-bottom: 0.4rem !important; }}
+    h3 {{ font-size: 1.2rem !important; margin-bottom: 0.3rem !important; }}
 
     p {{ color: {CORES['texto_sec']}; line-height: 1.6; margin-bottom: 0.5rem; }}
 
-    /* ═══ Tabs ═══ */
+    /* ═══ Tabs Stitch ═══ */
     .stTabs [data-baseweb="tab-list"] {{
-        gap: 0;
-        background: transparent;
-        border-bottom: 1px solid {CORES['borda']};
-        padding-bottom: 0;
+        gap: 6px;
+        background: rgba(18, 18, 23, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 14px;
+        padding: 6px;
         margin-bottom: 1.5rem;
     }}
     .stTabs [data-baseweb="tab"] {{
         background-color: transparent;
         color: {CORES['texto_sec']};
-        border-radius: 0;
-        padding: 10px 18px;
-        font-weight: 500;
-        font-size: 0.88em;
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+        border-radius: 10px;
+        padding: 8px 16px;
+        font-weight: 600;
+        font-size: 0.86em;
+        border: 1px solid transparent;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         white-space: nowrap;
     }}
     .stTabs [data-baseweb="tab"]:hover {{
-        color: {CORES['primaria']};
-        background-color: transparent;
+        color: #FFFFFF;
+        background-color: rgba(255, 255, 255, 0.05);
     }}
     .stTabs [aria-selected="true"] {{
-        color: {CORES['primaria']} !important;
-        border-bottom: 2px solid {CORES['primaria']} !important;
-        background-color: transparent !important;
-        font-weight: 600 !important;
+        color: #FFFFFF !important;
+        background: linear-gradient(135deg, rgba(36, 99, 235, 0.25) 0%, rgba(0, 119, 153, 0.20) 100%) !important;
+        border: 1px solid rgba(36, 99, 235, 0.5) !important;
+        box-shadow: 0 0 15px -3px rgba(36, 99, 235, 0.3) !important;
+        font-weight: 700 !important;
     }}
 
-    /* ═══ Cards ═══ */
+    /* ═══ Cards de Ideias ═══ */
     .idea-card {{
-        background: {CORES['app_card']};
-        border: 1px solid {CORES['borda']};
+        background: rgba(24, 24, 31, 0.75);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.07);
         border-radius: {CORES['raio_card']};
-        padding: 20px 24px;
+        padding: 22px 26px;
         margin-bottom: 16px;
         box-shadow: {CORES['app_sombra']};
-        transition: box-shadow 0.3s cubic-bezier(0.32, 0.72, 0, 1),
-                    transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
-                    border-color 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
-        z-index: 1;
     }}
     .idea-card:hover {{
-        box-shadow: {CORES['app_sombra_hover']};
-        transform: translateY(-1px);
-        border-color: rgba(108, 140, 255, 0.28);
-        z-index: 2;
+        box-shadow: 0 10px 25px -3px rgba(36, 99, 235, 0.2), 0 4px 10px -2px rgba(0, 0, 0, 0.4);
+        transform: translateY(-2px);
+        border-color: rgba(36, 99, 235, 0.4);
     }}
     .idea-card h3 {{
-        color: {CORES['primaria']} !important;
+        color: #60A5FA !important;
         margin-top: 0;
         margin-bottom: 8px;
     }}
 
     /* ═══ Metric box ═══ */
     .metric-box {{
-        background: {CORES['app_card']};
-        border: 1px solid {CORES['borda']};
+        background: rgba(24, 24, 31, 0.75);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.07);
         border-left: 3px solid {CORES['primaria']};
-        padding: 14px 18px;
-        border-radius: 0 8px 8px 0;
-        margin-bottom: 10px;
+        padding: 16px 20px;
+        border-radius: 0 12px 12px 0;
+        margin-bottom: 12px;
         box-shadow: {CORES['app_sombra']};
-        position: relative;
-        z-index: 1;
     }}
 
     /* ═══ Timeline ═══ */
     .timeline-item {{
-        background: {CORES['app_card']};
-        border: 1px solid {CORES['borda']};
-        border-left: 3px solid {CORES['primaria']};
-        padding: 14px 18px;
-        margin-bottom: 10px;
-        border-radius: 0 8px 8px 0;
+        background: rgba(24, 24, 31, 0.75);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-left: 4px solid {CORES['primaria']};
+        padding: 16px 20px;
+        margin-bottom: 12px;
+        border-radius: 0 12px 12px 0;
         box-shadow: {CORES['app_sombra']};
-        position: relative;
-        z-index: 1;
+        transition: all 0.2s ease;
     }}
     .timeline-item:hover {{
-        box-shadow: {CORES['app_sombra_hover']};
-        z-index: 2;
+        box-shadow: 0 8px 20px -3px rgba(0, 0, 0, 0.6);
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.12);
     }}
-    .timeline-item.carrossel {{ border-left-color: #818CF8; }}
-    .timeline-item.stories   {{ border-left-color: #A78BFA; }}
+    .timeline-item.carrossel {{ border-left-color: #2463eb; }}
+    .timeline-item.stories   {{ border-left-color: #007799; }}
     .timeline-item.reel      {{ border-left-color: #F87171; }}
 
     /* ═══ Flow progress ═══ */
@@ -303,52 +296,58 @@ st.markdown(f"""
         line-height: 1.5;
     }}
 
-    /* ═══ Botões ═══ */
+    /* ═══ Botões Google Stitch ═══ */
     .stButton > button[kind="primary"],
     div[data-testid="stForm"] button[kind="primary"] {{
-        background-color: #1A1A2E !important;
-        color: #E8E8ED !important;
-        border: 1px solid {CORES['primaria']} !important;
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        padding: 8px 20px !important;
-        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1) !important;
-        box-shadow: 0 2px 8px rgba(108, 140, 255, 0.15) !important;
+        background: linear-gradient(135deg, #2463eb 0%, #1d4ed8 100%) !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(59, 130, 246, 0.5) !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        padding: 9px 22px !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        box-shadow: 0 0 20px -3px rgba(36, 99, 235, 0.4) !important;
+        letter-spacing: 0.01em;
     }}
     .stButton > button[kind="primary"]:hover {{
-        background-color: #242440 !important;
+        background: linear-gradient(135deg, #3b82f6 0%, #2463eb 100%) !important;
         color: #FFFFFF !important;
-        box-shadow: 0 4px 18px rgba(108, 140, 255, 0.25) !important;
+        box-shadow: 0 0 25px -2px rgba(36, 99, 235, 0.6) !important;
         transform: translateY(-1px);
     }}
     .stButton > button:not([kind="primary"]),
     .stDownloadButton > button {{
-        background-color: #141420 !important;
-        color: #E8E8ED !important;
-        border: 1px solid #2A2A3C !important;
-        border-radius: 8px !important;
-        font-weight: 500 !important;
-        transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1) !important;
+        background-color: rgba(24, 24, 31, 0.85) !important;
+        color: #F8FAFC !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        padding: 8px 18px !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }}
     .stButton > button:not([kind="primary"]):hover,
     .stDownloadButton > button:hover {{
-        background-color: #1A1A2E !important;
-        border-color: #3A3A4C !important;
+        background-color: rgba(34, 34, 45, 0.95) !important;
+        border-color: rgba(255, 255, 255, 0.18) !important;
+        color: #FFFFFF !important;
+        transform: translateY(-1px);
     }}
 
-    /* ═══ Inputs ═══ */
+    /* ═══ Inputs & Selects ═══ */
     .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea {{
-        border-radius: 8px;
-        border: 1px solid {CORES['borda']};
-        background-color: {CORES['app_card']};
-        color: {CORES['texto']};
-        transition: border-color 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    .stTextArea > div > div > textarea,
+    div[data-baseweb="select"] > div {{
+        border-radius: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.09) !important;
+        background-color: rgba(18, 18, 23, 0.8) !important;
+        color: {CORES['texto']} !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }}
     .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus {{
-        border-color: {CORES['primaria']};
-        box-shadow: 0 0 0 2px rgba(108, 140, 255, 0.15);
+    .stTextArea > div > div > textarea:focus,
+    div[data-baseweb="select"] > div:focus-within {{
+        border-color: {CORES['primaria']} !important;
+        box-shadow: 0 0 0 3px rgba(36, 99, 235, 0.25) !important;
     }}
 
     /* ═══ Alerts ═══ */
@@ -427,7 +426,7 @@ st.markdown(f"""
         margin-bottom: 0.5rem;
     }}
 </style>
-""", unsafe_allow_html=True)
+""")
 
 # ─── Forçar cores nos botões via JS ────────────────────────────────────────
 st.html("""
@@ -438,22 +437,23 @@ st.html("""
             'button[data-testid="stBaseButton-primary"], ' +
             'button[data-testid="stBaseButton-primaryFormSubmit"]'
         ).forEach(function(btn){
-            btn.style.setProperty('background-color', '#1A1A2E', 'important');
-            btn.style.setProperty('color', '#E8E8ED', 'important');
-            btn.style.setProperty('font-weight', '600', 'important');
-            btn.style.setProperty('border', '1px solid #6C8CFF', 'important');
-            btn.style.setProperty('border-radius', '10px', 'important');
+            btn.style.setProperty('background', 'linear-gradient(135deg, #2463eb 0%, #1d4ed8 100%)', 'important');
+            btn.style.setProperty('color', '#FFFFFF', 'important');
+            btn.style.setProperty('font-weight', '700', 'important');
+            btn.style.setProperty('border', '1px solid rgba(59, 130, 246, 0.5)', 'important');
+            btn.style.setProperty('border-radius', '12px', 'important');
+            btn.style.setProperty('box-shadow', '0 0 20px -3px rgba(36, 99, 235, 0.4)', 'important');
             btn.querySelectorAll('p, span, div').forEach(function(el){
-                el.style.setProperty('color', '#E8E8ED', 'important');
+                el.style.setProperty('color', '#FFFFFF', 'important');
             });
         });
         document.querySelectorAll(
             'button[data-testid="stBaseButton-secondary"]'
         ).forEach(function(btn){
-            btn.style.setProperty('background-color', '#141420', 'important');
-            btn.style.setProperty('color', '#E8E8ED', 'important');
-            btn.style.setProperty('border', '1px solid #2A2A3C', 'important');
-            btn.style.setProperty('border-radius', '8px', 'important');
+            btn.style.setProperty('background-color', 'rgba(24, 24, 31, 0.85)', 'important');
+            btn.style.setProperty('color', '#F8FAFC', 'important');
+            btn.style.setProperty('border', '1px solid rgba(255, 255, 255, 0.08)', 'important');
+            btn.style.setProperty('border-radius', '10px', 'important');
         });
     }
 
@@ -475,7 +475,7 @@ st.html("""
 
 # ─── UI Components ──────────────────────────────────────────────────────────
 def flow_progress() -> None:
-    """Barra de progresso do fluxo de trabalho no topo do app."""
+    """Barra de progresso do fluxo de trabalho no topo do app estilo Google Stitch."""
     etapas = [
         ("tendencias",          "📈 Tendências"),
         ("ideias",              "💡 Ideias"),
@@ -492,23 +492,90 @@ def flow_progress() -> None:
         html_parts.append(
             f'<span class="flow-step {css}">{icon} {label}</span>'
         )
-    st.markdown(
-        '<div style="margin-bottom:16px;">' + "".join(html_parts) + "</div>",
-        unsafe_allow_html=True,
+    st.html(
+        f"""
+<div style="background:rgba(18, 18, 23, 0.65); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:10px 18px; margin-bottom:20px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+        {"".join(html_parts)}
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace; font-size:0.75rem; color:#64748B; display:flex; align-items:center; gap:6px;">
+        <span style="color:#76BC21;">📍</span>
+        <span>Rua Coelho Lisboa, 783 &bull; Tatuapé</span>
+    </div>
+</div>
+        """
     )
 
 
 def hero_header() -> None:
-    """Cabeçalho premium com badge, título em gradiente e subtítulo."""
-    st.markdown(f"""
-    <div class="hero">
-        <div class="hero-inner">
-            <span class="hero-badge">🎯 {HERO['badge']}</span>
-            <h1 class="hero-title">{HERO['titulo']}</h1>
-            <p class="hero-subtitle">{HERO['subtitulo']}</p>
+    """Header premium com identidade oficial Ensina Mais Tatuapé + status de IA + KPIs Benchmark (Google Stitch)."""
+    st.html(f"""
+<div class="stitch-header">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px;">
+        <div style="display:flex; align-items:center; gap:14px;">
+            <div style="width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg, #2463eb 0%, #007799 100%); display:flex; align-items:center; justify-content:center; box-shadow:0 0 20px -3px rgba(36,99,235,0.45); font-size:22px;">
+                🎓
+            </div>
+            <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:800; font-size:1.15rem; letter-spacing:-0.02em; color:#FFFFFF;">ENSINA MAIS</span>
+                    <span style="background:rgba(36, 99, 235, 0.2); color:#60a5fa; border:1px solid rgba(36, 99, 235, 0.4); font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:9999px; letter-spacing:0.04em;">TATUAPÉ</span>
+                </div>
+                <p style="font-size:0.8rem; color:#94A3B8; margin:2px 0 0 0; font-weight:500;">Motor de Carrosséis & Growth Social</p>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:8px; background:rgba(15,23,42,0.8); border:1px solid rgba(255,255,255,0.08); padding:6px 12px; border-radius:10px; margin-left:6px;">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#76BC21; box-shadow:0 0 8px #76BC21;"></span>
+                <span style="font-size:0.75rem; font-weight:600; color:#E2E8F0;">Gemini IA</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#76BC21; background:rgba(118,188,33,0.15); padding:1px 5px; border-radius:4px; font-weight:700;">ONLINE</span>
+            </div>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+            <div class="stitch-kpi-card">
+                <div style="width:32px; height:32px; border-radius:8px; background:rgba(36,99,235,0.15); display:flex; align-items:center; justify-content:center; color:#60A5FA; font-size:15px;">
+                    💾
+                </div>
+                <div>
+                    <div style="font-size:0.72rem; color:#94A3B8; font-weight:500;">Salvamento <span style="font-family:'JetBrains Mono',monospace; color:#64748B;">(&ge;4%)</span></div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:0.95rem; font-weight:800; color:#FFFFFF;">4.8%</span>
+                        <span style="font-size:0.7rem; font-weight:700; color:#76BC21;">+0.8%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stitch-kpi-card">
+                <div style="width:32px; height:32px; border-radius:8px; background:rgba(0,119,153,0.15); display:flex; align-items:center; justify-content:center; color:#38BDF8; font-size:15px;">
+                    📤
+                </div>
+                <div>
+                    <div style="font-size:0.72rem; color:#94A3B8; font-weight:500;">Envios DM <span style="font-family:'JetBrains Mono',monospace; color:#64748B;">(&ge;2.5%)</span></div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:0.95rem; font-weight:800; color:#FFFFFF;">3.2%</span>
+                        <span style="font-size:0.7rem; font-weight:700; color:#76BC21;">Meta OK</span>
+                    </div>
+                </div>
+            </div>
+            <div class="stitch-kpi-card">
+                <div style="width:32px; height:32px; border-radius:8px; background:rgba(118,188,33,0.15); display:flex; align-items:center; justify-content:center; color:#76BC21; font-size:15px;">
+                    🆕
+                </div>
+                <div>
+                    <div style="font-size:0.72rem; color:#94A3B8; font-weight:500;">Não Seguid. <span style="font-family:'JetBrains Mono',monospace; color:#64748B;">(&ge;20%)</span></div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:0.95rem; font-weight:800; color:#FFFFFF;">34.6%</span>
+                        <span style="font-size:0.7rem; font-weight:700; color:#76BC21;">Alta</span>
+                    </div>
+                </div>
+            </div>
+
+            <a href="https://wa.me/5511944750009" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:8px; background:rgba(118,188,33,0.18); border:1px solid rgba(118,188,33,0.4); color:#FFFFFF; padding:8px 14px; border-radius:12px; font-size:0.8rem; font-weight:700; transition:all 0.2s ease;">
+                <span style="color:#76BC21; font-size:16px;">📲</span>
+                <span>(11) 94475-0009</span>
+            </a>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+</div>
+    """)
 
 
 # ─── Sidebar ────────────────────────────────────────────────────────────────
@@ -575,10 +642,11 @@ from tabs.tab_imagens import render as render_imagens
 from tabs.tab_legendas import render as render_legendas
 from tabs.tab_cronograma import render as render_cronograma
 from tabs.tab_lote import render as render_lote
+from tabs.tab_animacao import render as render_animacao
 from tabs.tab_video import render as render_video
 from tabs.tab_historico import render as render_historico
 
-tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab9, tab10 = st.tabs([
+tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab11, tab9, tab10 = st.tabs([
     "📈 Tendências",
     "💡 Ideias",
     "🔬 NotebookLM",
@@ -587,6 +655,7 @@ tab1, tab2, tab8, tab3, tab4, tab5, tab6, tab7, tab9, tab10 = st.tabs([
     "📝 Legendas",
     "📅 Cronograma & Métricas",
     "📦 Lote",
+    "🎬 Animar Carrossel",
     "🎬 Vídeo Curto",
     "🗂️ Histórico",
 ])
@@ -607,6 +676,8 @@ with tab6:
     render_cronograma()
 with tab7:
     render_lote()
+with tab11:
+    render_animacao()
 with tab9:
     render_video()
 with tab10:

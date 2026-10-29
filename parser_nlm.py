@@ -124,6 +124,9 @@ def _normalizar_curso(curso_raw: str) -> str:
 
 
 def _gerar_slides_padrao(titulo: str, cta: str, curso: str) -> list[dict]:
+    curso_lower = (curso or "").lower()
+    is_tecnologia = any(k in curso_lower for k in ("robót", "robot", "prog", "tecnol", "games", "cód", "cod"))
+    oferta = "uma aula experimental gratuita" if is_tecnologia else "uma avaliação pedagógica gratuita"
     return [
         {"slide": 1, "tipo": "Capa", "texto": titulo},
         {"slide": 2, "tipo": "Segunda Capa", "texto": "A dor silenciosa que afeta as notas e o rendimento escolar no dia a dia."},
@@ -132,7 +135,7 @@ def _gerar_slides_padrao(titulo: str, cta: str, curso: str) -> list[dict]:
         {"slide": 5, "tipo": "Passo Prático", "texto": "A técnica de desconstrução pedagógica para destravar a autonomia da criança."},
         {"slide": 6, "tipo": "Ponte", "texto": f"Na Ensina Mais Tatuapé, o método individualizado de {curso} transforma essa dificuldade em segurança."},
         {"slide": 7, "tipo": "Prova", "texto": "Alunos com acompanhamento direcionado recuperam a confiança e elevam a média escolar já no primeiro bimestre."},
-        {"slide": 8, "tipo": "CTA", "texto": f'Comente "{cta}" ou chame no WhatsApp (11) 94475-0009 para agendar uma avaliação pedagógica gratuita no Tatuapé.'},
+        {"slide": 8, "tipo": "CTA", "texto": f'Comente "{cta}" ou chame no WhatsApp (11) 94475-0009 para agendar {oferta} no Tatuapé.'},
     ]
 
 
@@ -232,7 +235,10 @@ def extract_ideas_from_text(text: str) -> list[dict]:
 
         if len(slides) < 7:
             capa_txt = slides[0]["texto"] if slides else titulo
-            cta_txt = slides[-1]["texto"] if len(slides) > 1 and "cta" in slides[-1]["tipo"].lower() else f'Comente "{cta}" ou chame no WhatsApp (11) 94475-0009 para agendar uma avaliação pedagógica gratuita no Tatuapé.'
+            curso_lower = (curso or "").lower()
+            is_tecnologia = any(k in curso_lower for k in ("robót", "robot", "prog", "tecnol", "games", "cód", "cod"))
+            oferta = "uma aula experimental gratuita" if is_tecnologia else "uma avaliação pedagógica gratuita"
+            cta_txt = slides[-1]["texto"] if len(slides) > 1 and "cta" in slides[-1]["tipo"].lower() else f'Comente "{cta}" ou chame no WhatsApp (11) 94475-0009 para agendar {oferta} no Tatuapé.'
             slides_completos = _gerar_slides_padrao(capa_txt, cta, curso)
             slides_completos[0]["texto"] = capa_txt
             slides_completos[-1]["texto"] = cta_txt

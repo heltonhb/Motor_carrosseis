@@ -378,6 +378,253 @@ de melhorias e do progresso. Atualizar a cada bloco concluído.
 
 ---
 
+---
+
+## ✅ CONCLUÍDO — Bloco 20 (2026-10-14): V5 Ghostwriter (tons de voz)
+
+**Uma voz fixada era a causa mais barata de "cara de template".** Dois
+carrosséis do mesmo eixo saíam com o mesmo registro, porque a persona CAROL é
+uma só. Dar ao operador a escolha do registro foi a mudança de melhor
+custo-benefício do backlog: é prompt puro, sem custo de API além do mesmo.
+
+- `config.TONES` com os 6 tons (`automatico`, `natural`, `didatico`,
+  `storyteller`, `especialista`, `viral`), `TONES_PADRAO` e `TONES_POR_EIXO`
+  (`automatico` resolve pelo eixo: Didático→didatico, Comportamental→storyteller,
+  Diagnóstico→especialista; sem eixo, natural).
+- `prompts.TONES` com a instrução de registro de cada tom (tamanho de frase,
+  o que fazer, o que é proibido naquele registro) + `resolver_tom`, `tom_eh_valido`
+  e `bloco_tom`.
+- O bloco de tom entra em `get_prompt_ideias(tom)` e `get_prompt_legendas(tom, eixo)`
+  — no prompt, não na temperatura: registro é instrução, não criatividade.
+- `variacao=True/False` em `bloco_tom`: no lote de ideias, "automático" manda
+  **variar** o registro conforme o eixo de cada uma; numa peça única (legenda),
+  resolve pelo eixo da peça, porque não existe mistura dentro de um texto só.
+- Âncora de segurança em todo tom (inclusive no automático): nenhum personagem
+  da Turma da Mônica, nenhum número sem fonte, nenhuma promessa de resultado.
+  `test_tom.py` falha se essa âncora sumir.
+- UI: `tabs/_ui.seletor_tom()` reutilizável, ligado nas abas de Ideias e de
+  Legendas com chaves de session_state distintas.
+- `batch_engine.gerar_legendas_ideia(ideia, forcar, tom)` repassa o tom.
+- `test_tom.py` (21 testes) + 2 testes de `test_metricas_feedback.py` ajustados
+  para o novo contrato (o prompt de ideias não é mais idêntico à base isolada).
+
+---
+
+## ✅ CONCLUÍDO — Bloco 21 (2026-10-14): V6 Fidelidade à referência
+
+**A referência já existia; o que faltava era dizer ao modelo o que fazer com
+ela.** Sem isso, o prompt citava a cena do catálogo e o modelo caía no visual
+padrão dele — a "cara de slop" que nenhuma ferramenta cara resolve.
+
+- `prompts.FIDELIDADES` com os três níveis (`baixa` = só clima e paleta,
+  `media` = paleta/tipografia/grid, `alta` = composição e enquadramento),
+  `FIDELIDADE_PADRAO = "media"`, `fidelidade_eh_valida`, `resolver_fidelidade`
+  e `bloco_fidelidade`.
+- Alta fidelidade **degrada sozinha para média** quando não há imagem anexada
+  (`FLOW_FOTOS=false`), com aviso entregue ao usuário na lista de avisos e no
+  log. Degrade silencioso é o tipo de coisa que só se descobre olhando o
+  resultado e achando que o motor "ignorou" o pedido.
+- O bloco sempre repete que a foto real dos slides 1, 4, 5 e 7 é camada
+  intocável: fidelidade alta não pode virar permissão para redesenhar aluno ou
+  fachada.
+- `batch_engine.gerar_prompts_ideia(..., fidelidade=)` e `processar_lote(...,
+  fidelidade=)`; o `invalidate_cache` passou a usar o prompt composto, senão a
+  troca de fidelidade devolveria a geração cacheada e o usuário não veria
+  mudança nenhuma.
+- UI: `tabs/_ui.seletor_fidelidade()` ligado nas abas de Prompts (lote e
+  individual) e Lote, com aviso visível quando `FLOW_FOTOS` está desligado.
+- `test_fidelidade.py` (19 testes), incluindo o teste do cache e o do repasse
+  pelo `processar_lote`.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 22 (2026-10-14): V7 Acervo (o motor aprende com o aprovado)
+
+**Nível 7.** O feedback loop já existia para ideias; agora o carrossel
+**publicado e com métrica no alvo** alimenta as gerações seguintes.
+
+- `persistence.load_acervo` / `save_acervo` / `remover_acervo` /
+  `get_acervo`, com o mesmo padrão de escrita atômica e respeitando
+  `STORAGE_BACKEND` (um arquivo por registro no JSON, um documento no SQLite).
+  Arquivo corrompido é ignorado em vez de derrubar a leitura do acervo todo.
+- `acervo.py` novo: `slugify`, `alvo_do_eixo`, `extrair_dna`, `avaliar_promocao`,
+  `promover_para_acervo`, `bloco_dna`, `resumo_acervo`.
+- **Promoção por mérito, não por sorte:** exige status `publicado` **e** taxa de
+  salvamento no alvo do eixo (alvo lido da mesma string de `config.EIXOS` que o
+  prompt usa — os dois precisam concordar). O motivo da recusa sempre volta ao
+  usuário. `forcar=True` existe para quem sabe mais que o motor.
+- `extrair_dna` é determinístico (sem ida extra à API): estrutura, recursos
+  (`foto_real_slide_N`, `referencias`), paleta — **só hexes de marca**, um roxo
+  no prompt é bug, não padrão a aprender — e tipografia. **Nunca guarda o texto
+  dos slides:** acervo que guarda conteúdo envelhece e vira ruído.
+- `bloco_dna()` injeta os 5 registros mais recentes em forma de tags no prompt
+  de imagem. Acervo inteiro no contexto faria o modelo diluir as regras da marca.
+- UI: painel "Acervo" na aba de Prompts, com contagem, média de salvamentos,
+  botão de promoção e o motivo da elegibilidade sempre visível.
+- **Bug encontrado pelos testes:** `save_acervo` falhava em silêncio na primeira
+  promoção porque `data/acervo/` não existia (`ensure_data_dir` só cria `data/`).
+- `test_acervo.py` (25 testes) isolando o acervo em diretório temporário — teste
+  nenhum toca `data/acervo/`.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 23 (2026-10-14): V8 Brief e storyboard
+
+**O contrato que a animação vai consumir.** O storyboard já é validado por
+teste: as invariantes de tempo aparecem como asserção agora, e não como MP4
+dessincronizado depois.
+
+- `brief.py` novo: `montar_brief`, `validar_brief`, `montar_storyboard`,
+  `validar_storyboard`, `resumo_storyboard`.
+- Brief montado de forma determinística a partir da ideia, do template do eixo e
+  da config — sem chamar o Gemini. Ele organiza o que o motor já sabe; uma ida
+  à API aqui seria custo sem informação nova.
+- O brief carrega os invariantes sozinho (palavra-chave do CTA do eixo,
+  WhatsApp oficial, formato 4:5, referências mínimas do template, tom e
+  fidelidade resolvidos). O usuário não precisa preenchê-los e não pode quebrá-los.
+- Storyboard por slide: papel, texto, overlay cortado no limite de palavras
+  (3–8 nos slides 1/4/5), imagem, entrada, movimento, saída e cue de áudio.
+- **Tempo fechado aqui, não no renderer:** a duração de cada slide é ajustada em
+  passos de 1 frame até `frames % frames_do_beat == 0`, e todo ajuste aparece
+  como aviso. Os quatro moods da tabela foram conferidos (120/100/60 bpm com
+  3,0/3,0/4,0 s) — e um teste falha se alguém mexer no BPM sem recalcular.
+- Movimento por papel: slide de leitura (`Entrega`, `Prova`) é estático, porque
+  ninguém lê por baixo de uma cena se mexendo; capa e CTA ganham entrada forte.
+- Cues caem na grade de beats (beat mais próximo do início do slide).
+- `persistence.salvar/carregar_brief` e `salvar/carregar_storyboard`
+  (`data/brief.json`, `data/storyboard.json`), com `BRIEF_FILE`/`STORYBOARD_FILE`
+  na config.
+- UI: painel "Brief e storyboard" na aba de Prompts, com geração, métricas de
+  duração e download do `storyboard.json` — o arquivo que o V9 vai renderizar.
+- `test_brief.py` (24 testes).
+
+---
+
+## ✅ CONCLUÍDO — Bloco 24 (2026-10-14): V9 Carrossel vivo (o botão "Animar")
+
+**Nível 6d.** O motor agora produz MP4 4:5 com entrada de texto, movimento de
+câmera e trilha sincronizada no beat — por código, sem serviço pago.
+
+- `carrossel_vivo.py` novo: `preparar_fundo`/`quadro_fundo` (movimento de
+  fundo), `_camada_texto` (overlay rasterizado uma vez por slide),
+  `_cor_de_contraste`, `_compor_frame`, `sintetizar_trilha`, `renderizar`,
+  `renderizar_carrossel_vivo`, `pngs_do_carrossel`, `descrever`,
+  `ffmpeg_disponivel`, `ffmpeg_versao`.
+- Frames vão por pipe rawvideo direto para o ffmpeg — sem PNGs intermediários,
+  sem nome de frame para embolar a ordem. MP4 sempre em `yuv420p` e
+  `+faststart`: sem o primeiro o player do Instagram recusa o arquivo.
+- Trilha sintetizada em numpy (pad harmônico no grid de beats + blip por cue +
+  ducking) quando não há áudio local — serve para validar sincronia e para
+  ter áudio onde antes não havia.
+- `tabs/tab_animacao.py`: nova aba "🎬 Animar Carrossel" no `app.py`, com
+  seletor de fidelidade, métricas (slides, duração, BPM, movimentos), botão de
+  render, player do vídeo e download do MP4. Aborta com aviso claro se o ffmpeg
+  não estiver no PATH — o modo PNG continua funcionando sozinho.
+- **Três bugs reais encontrados na implementação:**
+  1. Redimensionar o fundo a cada frame levava minutos por vídeo. Agora o fundo
+     é pré-computado uma vez por slide e cada frame é só um recorte.
+  2. A camada de texto era compartilhada entre slides e a opacidade de entrada
+     era aplicada **in-place**: depois do primeiro frame o alfa ficava em 0 e o
+     texto sumia do vídeo inteiro. Havia teste de regressão antes de acontecer
+     em produção.
+  3. Overlay branco sobre slide claro (sumia) e colado no topo, colidindo com o
+     cabeçalho do slide. Agora a cor sai da luminância do fundo e o texto
+     encosta na base da área segura (y=1070), nunca acima de 260.
+- `test_carrossel_vivo.py` (18 testes): camadas, contraste, alfa em cache,
+  easing, trilha e o MP4 final conferido com `ffprobe` (1080x1350, `yuv420p`,
+  faixa de áudio, duração). Testes de render são `skipif` sem ffmpeg.
+- Medido: 960 frames / 32 s renderizam em ~60 s.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 25 (2026-10-15): demos do V9 — repetição de instrução e número sem fonte
+
+**Achado gerando um carrossel de verdade** (`15-10-2026_exemplo/`), não em
+teste sintético. As duas falhas saíram do mesmo payload real.
+
+- **Instrução duplicada no prompt_en.** A regra 12 anexa a cláusula canônica da
+  foto intocável, mas a checagem é por substring: quando o Gemini devolve a mesma
+  instrução *parafraseada*, a cláusula entra por cima e o slide 7 saía com o
+  parágrafo inteiro repetido duas vezes.
+  - `batch_engine._dedup_frases` (e `_proteger_blocos`) removem frases quase
+    iguais comparando sequências de tokens, com as palavras funcionais fora.
+  - **As cláusulas do motor têm prioridade**: onde houver paráfrase do modelo
+    fazendo o mesmo trabalho, sobrevive a do motor — é a que o validador exige na
+    íntegra. Blocos de várias frases (a cláusula da fachada são três) são
+    protegidos por marcador antes da comparação.
+  - Duas passadas: uma no início (evita repetir trabalho) e outra depois de
+    todas as regras automáticas, que é onde a paráfrase colide com a cláusula
+    recém-anexada.
+  - Regressão coberta: sem a distinção "cláusula presente × ausente", a dedup
+    apagava a instrução dos slides que não tinham a cláusula do motor e o slide
+    ficava sem regra nenhuma.
+- **Regra 3b — dado sem fonte.** A persona proibia inventar *depoimento*, não
+  estatística; o modelo respondeu "Irritação na lição de casa caiu 80% após 30
+  dias" sem fonte nenhuma.
+  - Regra nova no system instruction da persona: nenhum número, %, "3x", "2 mil"
+    ou "milhares" sem citar fonte real (IBGE, INEP, PISA, SAEB, dados da
+    unidade) ou sem estar marcado como observação da unidade.
+  - `prompts.numeros_sem_fonte` no validador, com lista de fontes e de marcas de
+    observação própria. Números que são conteúdo ("errou 5 questões", "turma do
+    4º ano B") não disparam.
+  - O validador **avisa**, não corrige: reescrever um dado inventado exige saber
+    o fato, e isso é decisão humana.
+- 10 testes novos (dedup, prioridade da cláusula do motor, números sem fonte).
+
+---
+
+## ✅ CONCLUÍDO — Bloco 26 (2026-10-15): regra 4 — o motor encurta o overlay
+
+**O validador avisava; agora o motor corrige.** Texto que não cabe no celular
+não é lido, e texto ilegível custa mais que texto curto.
+
+- `batch_engine._cortar_overlay` + `_limite_overlay`: 15 palavras no roteiro
+  curto, 8 nas thumbnails (slides 1, 4 e 5) — os mesmos limites do
+  `padroesVisuais.txt`.
+- Ordem do corte, do mais fiel ao texto ao menos fiel:
+  1. frase completa (melhor caso);
+  2. recuo até a última vírgula/ponto-e-vírgula dentro do limite — sem isso
+     saía "a criança associa o erro a…", que lê como erro de escrita;
+  3. corte por palavra com reticências, último recurso.
+- O corte acontece **antes** da unificação da cláusula (regra 8), então
+  `prompt_en` e `text_overlay` saem com o mesmo texto curto.
+- Todo corte aparece na lista de correções com a contagem antes/depois: mudar
+  palavra escrita é decisão visível, nunca silenciosa.
+- Corrige-se um bug da própria dedup (Bloco 25): `CLAUSULA_SEM_PERSONAGENS`
+  ("no cartoon characters") é fragmento curto, e protegê-lo como bloco a
+  desmontava — a regra 7 sumia do prompt. Blocos só são protegidos quando são
+  frases completas.
+- 9 testes novos; suíte com 278 testes verdes. Geração real do dia fecha com
+  **zero avisos** de validação.
+
+## 🔌 PLANEJADO — Bloco 19 (2026-10-14): Carrossel Vivo
+
+Origem: escada de 7 níveis de criação de carrossel do vídeo
+"TZg-PgSxm3M" (Felipe Borges) adaptada ao Motor de Carrosséis. A skill que
+detalha o plano está em `.claude/skills/carrossel-vivo/`
+(SKILL.md + references/contratos.md, references/motion.md,
+references/niveis.md).
+
+Diagnóstico do motor hoje: **nível 4** (instruções fixas em `prompts.py`,
+referências em `refs_catalog.py`, correção automática em `batch_engine.py`).
+Alvo: **nível 6** (sistema de design) e **nível 7** (processo que aprende).
+
+Status: **V5 a V9 concluídos** (Blocos 20–24). Restam o V10 (imagem
+paga, opcional) e o backlog antigo (E1, V3, M3…).
+
+Ordem deliberada — os três primeiros itens são prompt engineering puro, sem
+custo e sem risco, e o renderer só faz sentido depois que o texto e a imagem já
+estão bons:
+
+- **V5 (6a).** Ghostwriter: `prompts.TOMES` + `config.TONS` com
+  `automatico`, `natural`, `didatico`, `storyteller`, `especialista`, `viral`;
+  seletor nas abas de ideias/legendas. Impacto alto, custo baixo.
+- **V10 (5).** Geração de imagem paga dentro do app. Mantida **opcional** e
+  fora de qualquer caminho obrigatório de publicação.
+
+Contratos de dados, catálogo de movimento, matemática de tempo e armadilhas do
+renderer: `.claude/skills/carrossel-vivo/references/`.
+
 ## 🔜 PRÓXIMO — restante do backlog
 
 - **E1.** Quebrar app.py (~2.500 linhas) em tab_*.py + ui/styles.py

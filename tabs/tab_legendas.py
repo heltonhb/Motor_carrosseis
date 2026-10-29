@@ -9,7 +9,7 @@ import streamlit as st
 
 from batch_engine import gerar_legendas_ideia
 from persistence import save_geracao
-from tabs._ui import api_key_ok, clipboard_button, empty_state
+from tabs._ui import api_key_ok, clipboard_button, empty_state, seletor_tom
 
 
 def render() -> None:
@@ -22,6 +22,7 @@ def render() -> None:
         ideias_sel = st.session_state["ideias_selecionadas"]
         opts_l = {f"{i.get('eixo','?')} — {i.get('titulo','')}": i for i in ideias_sel}
         escolha_l = st.selectbox("Carrossel:", list(opts_l.keys()), key="sel_legenda")
+        tom = seletor_tom("tom_selecionado_legendas")
 
         if st.button("📝 Gerar Legendas", type="primary", width="stretch"):
             if not api_key_ok():
@@ -29,7 +30,7 @@ def render() -> None:
             else:
                 ideia = opts_l[escolha_l]
                 with st.spinner("🤖 Gerando 3 opções de legenda…"):
-                    dados = gerar_legendas_ideia(ideia, forcar=True)
+                    dados = gerar_legendas_ideia(ideia, forcar=True, tom=tom)
                     if dados:
                         dados["titulo"] = ideia.get("titulo", "Ideia")
                         dados["eixo"] = ideia.get("eixo", "")
