@@ -597,6 +597,45 @@ não é lido, e texto ilegível custa mais que texto curto.
 - 9 testes novos; suíte com 278 testes verdes. Geração real do dia fecha com
   **zero avisos** de validação.
 
+## ✅ CONCLUÍDO — Bloco 27 (2026-11-05): qualidade de imagem no motor local (P0/P1) + vidro com degradê de borda
+
+**Avaliação crítica de `image_utils.py` seguida de implementação.** Renders de
+avaliação em `teste_melhorias_05-11-2026/` (8 lâminas + 4 comparativos
+sólido×vidro; não versionar — binários de sessão).
+
+- **`_cover_crop`**: `exif_transpose` (fotos de celular não saem mais giradas),
+  `autocontrast(cutoff=1)`, crop com viés ao terço superior (protege rostos) e
+  `UnsharpMask` aplicado **à foto** em espaço 2x — não mais ao slide composto
+  (o passe final caiu para radius 0.6 / percent 55, sem halo no texto).
+- **Scrim adaptativo** (slides 1 e 5): `_desenhar_scrim` com rampa bilinear
+  (sem banding, muito mais rápido que linha-a-linha) e `_scrim_alpha_adaptativo`
+  dosando a intensidade pela luminância da foto.
+- **Glassmorphism reescrito** (`_draw_rounded_card_with_shadow`): código morto
+  removido; blur da região + tint adaptativo; **`_glass_fill_radial`** com
+  degradê de BORDA retangular (rampas 1D combinadas por `darker`): platô opaco
+  alpha 245 cobrindo ~72% centrais (texto sempre legível) e fade até alpha 25
+  só na faixa periférica (`depth = 0.14`); borda branca 3px + reflexo diagonal
+  (`_draw_glass_sheen`). Iterações até aqui: radial circular sobrepôs fade na
+  zona do texto → ilegível; formato retangular resolveu.
+- **Grifo**: `_auto_highlight_phrases` com stopwords PT-BR; `_highlight_spans`
+  casa por palavra (nada de "co" dentro de "es**co**la") e destaca frases que
+  atravessam o word-wrap (prefixo no fim da linha + sufixo no início da
+  seguinte). Trilha nova: campo `destaques`/`highlight_phrases` no JSON de
+  prompts → `render_carousel_from_prompts` → `render_slide_hd`.
+- `lru_cache` em `_load_font`. Testes: 40/40 em `test_image_fix.py` +
+  `test_postproc.py`.
+
+**Retomar daqui (P2 pendentes da mesma avaliação):**
+1. Interlinea relativa ao corpo do texto (hoje `_ENTRELINHAS=14` fixo; alvo
+   `spacing ≈ 0.22 × size`).
+2. Raio do grifo (10) parece pílula; efeito marca-texto pede canto quase reto.
+3. Números mágicos por slide nos 8 blocos de `render_slide_hd` → dicts de
+   layout.
+4. Fino do vidro: `depth` (0.14) e `edge_alpha` (25) em `_glass_fill_radial`
+   são os knobs de dramatismo; validar legibilidade no slide 5 (scrim escuro).
+5. commit pendente dos demais arquivos modificados da sessão anterior
+   (acervo, batch_engine, brief, prompts, tabs, testes).
+
 ## 🔌 PLANEJADO — Bloco 19 (2026-10-14): Carrossel Vivo
 
 Origem: escada de 7 níveis de criação de carrossel do vídeo
