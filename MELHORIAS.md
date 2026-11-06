@@ -636,6 +636,114 @@ sólido×vidro; não versionar — binários de sessão).
 5. commit pendente dos demais arquivos modificados da sessão anterior
    (acervo, batch_engine, brief, prompts, tabs, testes).
 
+## ✅ CONCLUÍDO — Bloco 28 (2026-11-05): composição editorial v3 dos cards
+
+**Pedido:** "gerar cards com composições profissionais para o Instagram". A
+base técnica estava boa (scrim, vidro, grifo), mas as lâminas eram todas
+centradas, com card de altura fixa e vazios internos — cara de template, não
+de peça desenhada. Mudança toda em `image_utils.py`; API pública intacta.
+
+- **Grade única.** `_MARGEM=96` / `_LARGURA_UTIL=888` / `_Y_BASE=1080`, usados
+  por todas as lâminas (fim dos números mágicos soltos). Rodapé de série em
+  todas: `@ensinamais.tatuape · 03/08`, com cor escolhida pela luminância real
+  da faixa (`_cor_sobre_regiao`) — some o texto branco sobre fundo claro.
+- **Sobrancelha (kicker).** `_draw_kicker`: filete curto + caixa alta com
+  tracking. É o que cria hierarquia olho → sobrancelha → manchete sem gastar
+  altura. Aplicado em todas as 8 lâminas (`CASO REAL · ENSINO FUNDAMENTAL`,
+  `MÉTODO ENSINA MAIS`, `PRÓXIMO PASSO`…).
+- **Tipografia com baseline.** `_medir_bloco` + `_draw_text_block`: entrelinha
+  constante (`size × leading`) e desenho ancorado na baseline (`ls`/`ms`), no
+  lugar da altura de tinta por linha. Acentos e descendentes não empurram mais
+  a linha seguinte. Grifo virou marca-texto de canto quase reto (raio 3px, não
+  pílula) e aceita parágrafos (`\n`).
+- **Card dimensionado pelo conteúdo** (`_card_sobre_foto`): altura = kicker +
+  bloco + ícones; ancorado na base da foto, texto à esquerda. Acabou o card de
+  230px com 100px de texto boiando.
+- **Bug real encontrado no caminho:** a posição do card pode estreitá-lo para
+  desviar de rostos, mas o texto era medido antes, na largura cheia. O laço de
+  correção oscilava (largura→altura→largura) e o slide 5 saía com 4 linhas num
+  card calculado para 2 — texto vazando pela borda. Agora a largura é decidida
+  uma vez (caixa de referência) e congelada; só o `dy` é reajustado
+  (`permitir_lateral=False`).
+- **Composições por lâmina:** 1 capa com card inferior e ícones; 2 segunda capa
+  azul com numeral fantasma no topo, manchete branca à esquerda e ícones
+  justificados; 3 comparativo com selo `VS` e cards mais altos (menos vazio no
+  pé); 4/5 fotos com card (ícone no topo / sem ícone); 6 grid 2×2 + chip de
+  endereço + texto direto no fundo (quebra a monotonia de card em tudo);
+  7 fachada com kicker de caso real; 8 CTA com logo no arco, manchete à
+esquerda, botão WhatsApp e barra Envie/Salve.
+- **Vidro menos leitoso:** platô central 250 e borda 48 (antes 245/25) — a foto
+  não aparece mais "listrada" atrás do texto, sem perder o efeito.
+- **Removidos:** aspas decorativas do slide 7 (caíam no meio da manchete) e o
+  arco claro do slide 2 (apagava a tag de navegação branca).
+- **Verificação:** 8 lâminas renderizadas do payload real
+  `15-10-2026_exemplo/prompts_imagem.json` e inspecionadas visualmente; 302
+  testes passando; `ruff check image_utils.py` limpo (o repo ainda tem 36
+  avisos pré-existentes em outros arquivos, fora deste escopo).
+
+**P2 do Bloco 27 resolvidos aqui:** entrelinha relativa (1), raio do grifo (2),
+knobs do vidro (4); a grade cobre boa parte do item 3. Continua pendente o
+commit dos arquivos da sessão anterior.
+
+## ✅ CONCLUÍDO — Bloco 29 (2026-11-05): rostos escondidos — detecção por Haar, não por tom de pele
+
+**Pedido:** "continuar a tratar o problema dos rostos escondidos". Diagnóstico
+com máscara sobreposta nas fotos reais (`teste_melhorias_05-11-2026/rostos/
+diag_slide*.png`) mostrou que a heurística de tom de pele era a causa, não um
+detalhe: a cadeia testa→queixo **descia pelo braço** (pele contígua) e relógio/
+camiseta escura **viravam cabelo**. Numa foto com 4 pessoas o card tocava 45
+células "protegidas" porque metade do corpo era marcado como rosto. Tom de pele
+sozinho não separa rosto de braço.
+
+- **Troca de abordagem (aprovada pelo usuário):** detector real de rosto.
+  `opencv-python-headless==4.10.0.84` adicionado — a série 4.x embute as cascatas
+  Haar; a 5.x tinha removido os XMLs e só traz o YuNet (que exige baixar um
+  `.onnx`). YuNet testado e descartado: dava falso positivo no cartoon do mural
+  (slide 7) e também não pegava nuca.
+- **`_rostos_haar`** (`image_utils.py`): cascata frontal + perfil, nas duas
+  orientações (espelho), sobre luminância equalizada; devolve retângulos em
+  espaço 1×. **`_mapa_pele` reescrita** mas com o MESMO contrato `(mapa, cabeca)`
+  — nada a jusante mudou (`_score_rosto`, `_mascara_protegida`,
+  `_melhor_posicao_editorial`, `_card_sobre_foto`). `mapa` = fração da célula
+  coberta por rosto Haar; `cabeca` = retângulo expandido (cabelo acima, orelhas
+  aos lados) ∪ blob de cabelo.
+- **Nuca (cabeça de costas) não tem detector que pegue** — nem Haar, nem neural,
+  porque não há rosto na imagem. Resolvido com blob de cabelo conservador:
+  célula escura compacta (≥2 vizinhos), **na parte de cima da foto** e **com
+  pele genuína diretamente embaixo** (nuca/queixo). Cabelo fica acima da pele e
+  em cima; camiseta fica embaixo e com pele acima — as três condições separam
+  os dois e matam o falso positivo de roupa escura.
+- **Sem OpenCV → cai só no blob de cabelo** (nunca quebra o render).
+- **Resultado nas 4 lâminas-foto:** slide 1 e 4 (nuca) — cabeça e nuca livres,
+  card na lateral sobre o monitor; slide 5 (4 crianças) — os 4 rostos visíveis, card na mesa
+  (`antes 0.423 → depois 0.0`); slide 7 — **o "card gigante" era efeito da
+  detecção ruim** (o card se esticava para desviar de falsos rostos no mural);
+  com o mapa correto ele volta à altura do conteúdo. Zero falso positivo de
+  braço/monitor.
+- **Testes:** `test_card_evita_rosto_na_foto` passou a usar foto real da unidade
+  (elipse sintética não dispara Haar); os outros 3 de rosto continuam válidos.
+  302 testes verdes; `ruff check image_utils.py test_image_fix.py` limpo.
+
+**Retoque de composição (slide 1, pedido do usuário):** "o card deveria estar
+mais à direita" e, depois, "não gostei — evite a região da nuca (logo abaixo do
+cabelo) também". A primeira tentativa (teto `_PELE_TOPO_FRAC` 0.60→0.45 para
+limpar a direita e jogar a faixa cheia no pé) foi rejeitada: a faixa cobria a
+**nuca da menina**. Solução final: o blob de cabelo agora **desce pela nuca** —
+ao marcar uma célula de cabelo, caminha para baixo por até `_PELE_NAPE_LINHAS = 3`
+células enquanto houver pele contígua (≥ `_PELE_NAPE_MIN = 0.18`, tolera a sombra
+da nuca) ou mais cabelo, e para no ombro/roupa. Com a nuca protegida, o pé cheio
+deixa de ter `toca=0` e a busca editorial escolhe a **lateral direita estreita**
+(`box=(433, 681, 984, 1080)`, largura 551) sobre o monitor: cabeça, cabelo e
+nuca da menina ficam livres à esquerda. Slide 4 (nuca do menino, linha 8)
+continua protegido — card à esquerda sobre o monitor.
+
+**Retomar daqui:** commit pendente deste bloco + dos arquivos da sessão anterior
+(acervo, batch_engine, brief, prompts, tabs, testes). `opencv-python-headless` é
+dependência nova — lembrar no deploy (Streamlit Cloud) que o wheel é grande
+(~47MB) mas sem GUI.
+
+---
+
 ## 🔌 PLANEJADO — Bloco 19 (2026-10-14): Carrossel Vivo
 
 Origem: escada de 7 níveis de criação de carrossel do vídeo

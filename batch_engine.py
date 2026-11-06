@@ -23,14 +23,25 @@ from gemini import call_gemini_json, invalidate_cache
 from image_utils import generate_all_slides
 from prompts import (
     CLAUSULA_SEM_PERSONAGENS,
+    CTR_LADO_PADRAO,
+    CTR_PALETE_PADRAO,
     FRASE_FACHADA,
     FRASE_FOTO_REAL,
+    GATILHO_POR_EIXO,
+    GATILHOS_CTR,
+    LADOS_CTR,
     PADROES_PROIBIDOS_FOTO,
     PROMPT_PROMPTS_IMAGEM,
+    SLIDES_CTR,
     TEMPERATURAS,
+    _tokens_significativos,
+    bloco_direcao_visual_eixo,
     bloco_fidelidade,
+    cor_eh_valida,
+    gatilho_eh_valido,
     get_prompt_cronograma,
     get_prompt_legendas,
+    normalizar_gatilho,
     personagens_no_texto,
     resolver_fidelidade,
     validate_prompts,
@@ -313,19 +324,47 @@ def _limite_overlay(slide_num: int | None) -> int:
     return MAX_PALAVRAS_THUMB if slide_num in _SLIDES_THUMB else MAX_PALAVRAS_OVERLAY
 
 
+# Palavras funcionais/preposições/negações que NUNCA podem ficar soltas no fim
+# de um overlay truncado ("O erro no Ensino Fundamental não…", "…erro por…").
+_PALAVRAS_PENDENTES_FIM = {
+    "a", "o", "as", "os", "um", "uma", "uns", "umas",
+    "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+    "por", "pelo", "pela", "pelos", "pelas", "para", "pra", "pro",
+    "com", "sem", "sob", "sobre", "entre", "até", "após", "perante",
+    "que", "se", "e", "ou", "mas", "nem", "como", "quando", "onde",
+    "não", "mais", "menos", "muito", "tão", "seu", "sua", "seus", "suas",
+}
+
+_RE_PREFIXO_BUROCRATICO = re.compile(
+    r"^(?:caso\s+real|depoimento\s+real)[^:]{0,80}:\s*(.+)$",
+    re.IGNORECASE,
+)
+
+
 def _cortar_overlay(texto: str, limite: int) -> tuple[str, bool]:
     """
-    Encurta o overlay para caber no limite, preferindo frase inteira.
+    Encurta o overlay para caber no limite, preferindo frase/cláusula inteira e
+    eliminando pontuação pendente (vírgula/dois-pontos) ou preposições soltas.
 
-    Cortar no meio da frase deixa o slide com ideia pela metade, que é pior do
-    que uma frase a menos. Então: primeiro tenta fechar em frase completa; se
-    nem a primeira cabe, corta por palavra e marca com reticências.
+    Se o texto começa com preâmbulo burocrático ("Caso real de aluno...: <fato>"),
+    extrai diretamente o fato/transformação após os dois-pontos.
     """
     limpo = (texto or "").strip()
     if not limpo:
         return limpo, False
+
+    mudou_prefixo = False
+    m_pref = _RE_PREFIXO_BUROCRATICO.match(limpo)
+    if m_pref and m_pref.group(1).strip():
+        pos_dp = m_pref.group(1).strip()
+        limpo = pos_dp[0].upper() + pos_dp[1:] if len(pos_dp) > 1 else pos_dp.upper()
+        mudou_prefixo = True
+
     if len(limpo.split()) <= limite:
-        return limpo, False
+        sem_pendente = limpo.rstrip(",;:—- ").strip()
+        if sem_pendente != limpo:
+            return sem_pendente, True
+        return limpo, mudou_prefixo
 
     frases = [f.strip() for f in re.split(r"(?<=[.!?])\s+", limpo) if f.strip()]
     acumuladas: list[str] = []
@@ -335,19 +374,128 @@ def _cortar_overlay(texto: str, limite: int) -> tuple[str, bool]:
             break
         acumuladas.append(frase)
     if acumuladas:
-        return " ".join(acumuladas), True
+        return " ".join(acumuladas).rstrip(",;:—- ").strip(), True
 
-    # Nenhuma frase cabe inteira: recua até a última vírgula dentro do limite.
-    # "a criança associa o erro a…" lê como falha de escrita; "quando a nota
-    # baixa é recebida como falha pessoal, a…" lê como corte de frase.
+    # Nenhuma frase cabe inteira: recua até a última pausa sintática (, ; : — -)
+    # dentro do limite e REMOVE a pontuação final pendente para não deixar a
+    # frase mutilada na imagem ("...brava com a nota," ou "...na unidade:").
     palavras = limpo.split()[:limite]
-    for corte in range(len(palavras), 1, -1):
+    for corte in range(len(palavras), 2, -1):
         if palavras[corte - 1].endswith((",", ";", ":", "—", "-")):
-            return " ".join(palavras[:corte]).strip(), True
-    return " ".join(palavras).rstrip(",;:") + "…", True
+            trecho = " ".join(palavras[:corte]).rstrip(",;:—- ").strip()
+            if len(trecho.split()) >= 3:
+                return trecho, True
+
+    # Último recurso: corta no limite removendo preposições/negações pendentes no fim
+    while len(palavras) > 3:
+        ultima_limpa = re.sub(r"[^\wà-ÿ]", "", palavras[-1].lower())
+        if ultima_limpa in _PALAVRAS_PENDENTES_FIM:
+            palavras.pop()
+        else:
+            break
+    return " ".join(palavras).rstrip(",;:—- ") + "…", True
 
 
-def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
+def sincronizar_overlay_no_prompt(slide: dict, novo_overlay: str) -> str:
+    """
+    Sincroniza `novo_overlay` dentro de `slide['text_overlay']` e na cláusula
+    `in Brazilian Portuguese: '...'` de `slide['prompt_en']`.
+
+    Usado pela UI (`tab_prompts.py`) quando o gestor edita o texto sobreposto em
+    português para que o `.txt` de automação do Google Flow saia atualizado.
+    """
+    limpo = (novo_overlay or "").strip()
+    slide["text_overlay"] = limpo
+    prompt_en = (slide.get("prompt_en") or "").strip()
+    if not prompt_en or not limpo:
+        return prompt_en
+    matches = list(_RE_CLAUSULA_OVERLAY.finditer(prompt_en))
+    if matches:
+        m = matches[0]
+        prompt_en = prompt_en[: m.start(1)] + limpo + prompt_en[m.end(1) :]
+    else:
+        prompt_en = _anexar_antes_da_tag(
+            prompt_en, f"text overlay in Brazilian Portuguese: '{limpo}'."
+        )
+    slide["prompt_en"] = prompt_en
+    return prompt_en
+
+
+_GATILHO_CANON = {normalizar_gatilho(g): g for g in GATILHOS_CTR}
+
+# Frases de apoio quando nada no payload serve de texto de impacto: curtas,
+# genéricas o bastante para qualquer tema e sem palavra de conteúdo típica de
+# overlay (a regra 17 proíbe repetir o título).
+_CTR_IMPACTO_FALLBACK = {
+    "surpresa": "Isso muda tudo",
+    "misterio": "Ninguém te contou",
+    "urgencia": "O tempo passou",
+    "superacao": "A virada chegou",
+}
+
+
+def _derivar_texto_impacto(overlay: str, prompt_pt: str, gatilho: str) -> str:
+    """Frase de 3–4 palavras do prompt_pt que não repete nenhuma palavra de
+    conteúdo do overlay; senão, o fallback curado do gatilho."""
+    ov_tokens = _tokens_significativos(overlay)
+    for frase in re.split(r"(?<=[.!?])\s+", (prompt_pt or "").strip()):
+        palavras = frase.strip().strip(".,!?;:").split()
+        if 3 <= len(palavras) <= 4:
+            tokens = _tokens_significativos(frase)
+            if tokens and not (tokens & ov_tokens):
+                return " ".join(palavras)
+    return _CTR_IMPACTO_FALLBACK.get(gatilho, "Isso muda tudo")
+
+
+def _garantir_ctr(slide: dict, eixo: str | None, msgs: list[str]) -> None:
+    """Regra 17 — CTR estruturado: cria/normaliza o objeto "ctr" nos slides de
+    capa (1, 2, 4, 5). Idempotente: depois do primeiro passe nada muda. Cada
+    correção vai para msgs (nunca em silêncio, como as demais regras)."""
+    snum = _para_int(slide.get("slide_num"))
+    if snum not in SLIDES_CTR:
+        return
+    overlay = (slide.get("text_overlay") or "").strip()
+    ctr = slide.get("ctr") if isinstance(slide.get("ctr"), dict) else {}
+    antes = dict(ctr)
+
+    gatilho_norm = normalizar_gatilho(ctr.get("gatilho_emocional"))
+    if not gatilho_eh_valido(gatilho_norm):
+        padrao = normalizar_gatilho(GATILHO_POR_EIXO.get((eixo or "").strip(), "mistério"))
+        ctr["gatilho_emocional"] = _GATILHO_CANON[padrao]
+    else:
+        ctr["gatilho_emocional"] = _GATILHO_CANON[gatilho_norm]
+
+    impacto = (ctr.get("texto_de_impacto") or "").strip()
+    ok = 3 <= len(impacto.split()) <= 4
+    if ok and overlay:
+        ok = not (_tokens_significativos(impacto) & _tokens_significativos(overlay))
+    if not ok:
+        ctr["texto_de_impacto"] = _derivar_texto_impacto(
+            overlay,
+            (slide.get("prompt_pt") or slide.get("estilo") or ""),
+            normalizar_gatilho(ctr["gatilho_emocional"]),
+        )
+
+    if (ctr.get("lado_negative_space") or "").strip().lower() not in LADOS_CTR:
+        ctr["lado_negative_space"] = CTR_LADO_PADRAO.get(snum, "esquerda")
+
+    paleta = ctr.get("paleta_complementar")
+    if (
+        not isinstance(paleta, dict)
+        or not all(cor_eh_valida(paleta.get(k)) for k in ("destaque", "contraste"))
+        or str(paleta.get("destaque")).lower() == str(paleta.get("contraste")).lower()
+    ):
+        ctr["paleta_complementar"] = dict(CTR_PALETE_PADRAO)
+
+    if ctr != antes:
+        slide["ctr"] = ctr
+        mudancas = sorted(k for k in ctr if ctr.get(k) != antes.get(k))
+        msgs.append(
+            f"slide {snum}: ctr normalizado/completado ({', '.join(mudancas)}) — regra 17"
+        )
+
+
+def _garantir_regras(slide: dict, corrigidos: list | None, eixo: str | None = None) -> None:
     """Garante as regras 5, 6, 7 e 12 em TODO slide, seja qual for a origem.
 
     Regra 5: exatamente UMA cláusula de overlay, com o texto igual ao
@@ -406,6 +554,10 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
                 f"para {len(overlay.split())} palavras (limite {limite}, regra 4)"
             )
 
+    # Regra 17 — CTR estruturado. Depois do corte do overlay: o texto de
+    # impacto é checado contra o text_overlay FINAL, não contra o rascunho.
+    _garantir_ctr(slide, eixo, msgs)
+
     idx_tag = prompt_en.lower().find(_FRASE_TAG.lower())
     if matches and snum != 8 and idx_tag != -1 and matches[0].start() > idx_tag:
         # cláusula anexada DEPOIS da tag: remove e reanexa antes dela
@@ -432,9 +584,16 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
             prompt_en, "No cartoon characters, generic minimalist line-art icons only."
         )
 
-    # Regra 12 — fachada intocável: com "fachada" nas referências, a foto de
-    # referência entra exatamente como está; só legenda/card por cima
-    if "fachada" in (slide.get("referencias") or []):
+    # Regra 12 — fachada intocável: com "fachada" nas referências (fora das
+    # thumbnails 1, 4, 5 que já usam FRASE_FOTO_REAL), a foto de referência
+    # entra exatamente como está; só legenda/card por cima
+    if snum in _SLIDES_THUMB and FRASE_FACHADA.lower() in prompt_en.lower() and FRASE_FOTO_REAL.lower() in prompt_en.lower():
+        prompt_en = re.sub(re.escape(FRASE_FACHADA), "", prompt_en, flags=re.IGNORECASE)
+        prompt_en = re.sub(r"\s{2,}", " ", prompt_en).strip()
+        msgs.append(
+            f"slide {snum}: cláusula de depoimento da fachada removida da thumbnail (evita colisão com FRASE_FOTO_REAL)"
+        )
+    elif "fachada" in (slide.get("referencias") or []) and snum not in _SLIDES_THUMB:
         antes_f = prompt_en
         prompt_en = _anexar_antes_da_tag(prompt_en, FRASE_FACHADA)
         if prompt_en != antes_f:
@@ -488,7 +647,9 @@ def _garantir_regras(slide: dict, corrigidos: list | None) -> None:
             )
 
 
-def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
+def _enforce_foto_real(
+    dados: dict, corrigidos: list | None = None, eixo: str | None = None
+) -> dict:
     """Pós-processamento dos prompts de imagem — idempotente.
 
     Regras programáticas que o Gemini ignora com frequência:
@@ -501,7 +662,9 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
       prompt_pt, text_overlay, estilo, base_prompt, dicas_gerais — regra 7);
     - slides com "fachada" nas referências recebem a cláusula de foto
       intocável (regra 12) e o slide 7 sempre referencia "fachada" (11);
-    - referencias limpas contra o catálogo (regra 11).
+    - referencias limpas contra o catálogo (regra 11);
+    - slides 1, 2, 4 e 5: objeto "ctr" normalizado/completado com os padrões do
+      eixo (regra 17 — CTR estruturado).
 
     Preserva o text_overlay original. Cada correção vira uma linha em
     `corrigidos` (out-collector opcional).
@@ -590,13 +753,20 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
                     overlay_match.group(1).strip() if overlay_match else overlay
                 )
 
+                paleta_ctr = (slide.get("ctr") or {}).get("paleta_complementar")
+                destaque = (
+                    paleta_ctr.get("destaque")
+                    if isinstance(paleta_ctr, dict) and cor_eh_valida(paleta_ctr.get("destaque"))
+                    else "#FFC20E"
+                )
                 slide["prompt_en"] = (
                     f"{FRASE_FOTO_REAL} "
                     f"The scene depicts: {cena}. "
                     f"1080x1350 px vertical 4:5 format, "
                     f"centered elements respecting a 1:1 square safe zone (1080x1080 px) "
                     f"for Instagram grid preview. "
-                    f"Bold Brand Blue #007799 text overlay with vibrant yellow #FFC20E "
+                    f"Subtle dark gradient scrim behind typography for high mobile contrast. "
+                    f"Bold Brand Blue #007799 text overlay with vibrant {destaque} "
                     f"marker highlight, modern geometric sans-serif typography. "
                     f"Official 'Ensina Mais Turma da Mônica' logo badge at the bottom corner. "
                     f"No cartoon characters, generic minimalist line-art icons only. "
@@ -612,7 +782,7 @@ def _enforce_foto_real(dados: dict, corrigidos: list | None = None) -> dict:
                     )
 
         _normaliza_refs(slide, slide.get("tipo_foto"))
-        _garantir_regras(slide, corrigidos)
+        _garantir_regras(slide, corrigidos, eixo=eixo)
 
     return dados
 
@@ -692,6 +862,7 @@ def gerar_prompts_ideia(
     nivel_fid, avisos_fid = resolver_fidelidade(fidelidade, tem_imagem=bool(imagens))
     prompt = (
         PROMPT_PROMPTS_IMAGEM
+        + bloco_direcao_visual_eixo(ideia.get("eixo"), ideia.get("tom"))
         + bloco_fidelidade(nivel_fid, tem_imagem=bool(imagens))
         + bloco_dna()
     )
@@ -709,7 +880,7 @@ def gerar_prompts_ideia(
     )
     if dados:
         avisos_bruto = validate_prompts(dados, ideia)
-        dados = _enforce_foto_real(dados, corrigidos=corrigidos)
+        dados = _enforce_foto_real(dados, corrigidos=corrigidos, eixo=ideia.get("eixo"))
         avisos_finais = validate_prompts(dados, ideia)
         if avisos is not None:
             avisos.extend(avisos_finais)
@@ -741,10 +912,12 @@ def gerar_cronograma(ideias: list, forcar: bool = False) -> dict | None:
     return call_gemini_json(get_prompt_cronograma(), ctx, temperature=TEMPERATURAS["cronograma"])
 
 
-def gerar_slides_ideia(ideia: dict) -> list:
-    """Renderiza os slides de UMA ideia com o template do eixo.
+def gerar_slides_ideia(ideia: dict, prompts_data: dict | None = None) -> list:
+    """Renderiza os slides de UMA ideia com o template do eixo (ou enriquecido com prompts_data).
     Retorna lista de tuplas (nº slide, bytes, info)."""
     tkey = eixo_para_template(ideia.get("eixo", "Didático"))
+    if prompts_data:
+        return generate_all_slides(tkey, ideia.get("slides_sugeridos", []), prompts_data=prompts_data)
     return generate_all_slides(tkey, ideia.get("slides_sugeridos", []))
 
 
@@ -778,6 +951,7 @@ def processar_lote(
         if on_progress:
             on_progress(step, total, f"⚙️ Processando: {titulo}…")
 
+        dados_prompts = None
         if fazer_prompts:
             avisos: list = []
             corrigidos: list = []
@@ -785,6 +959,7 @@ def processar_lote(
                 ideia, forcar=forcar, avisos=avisos, corrigidos=corrigidos, fidelidade=fidelidade
             )
             if dados:
+                dados_prompts = dados
                 results[f"prompts_{idx}"] = {
                     "titulo": titulo,
                     "prompts": dados,
@@ -794,7 +969,7 @@ def processar_lote(
                 }
 
         if fazer_slides:
-            imgs = gerar_slides_ideia(ideia)
+            imgs = gerar_slides_ideia(ideia, prompts_data=dados_prompts)
             results[f"slides_{idx}"] = {"titulo": titulo, "images": imgs}
 
         step += 1

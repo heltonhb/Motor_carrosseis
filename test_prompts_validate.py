@@ -8,6 +8,17 @@ from prompts import FRASE_FACHADA, FRASE_FOTO_REAL, validate_prompts
 
 _TIPOS_THUMB = {1: "recepcao_unidade", 4: "alunos_robotica", 5: "aluno_programacao"}
 
+_CTR_IMPACTO = {1: "Ninguém contou nada", 2: "Isso muda tudo", 4: "O tempo passou", 5: "A virada chegou"}
+
+
+def _ctr_capa(n: int) -> dict:
+    return {
+        "gatilho_emocional": "mistério",
+        "texto_de_impacto": _CTR_IMPACTO[n],
+        "lado_negative_space": "esquerda" if n in (1, 4) else "direita",
+        "paleta_complementar": {"destaque": "#FFC20E", "contraste": "#F58220"},
+    }
+
 
 def _tag_frase(n: int) -> str:
     if n == 8:
@@ -45,6 +56,7 @@ def _slide(n: int, overlay: str, prompt_en: str | None = None) -> dict:
         "tipo_foto": _TIPOS_THUMB.get(n, "logo"),
         "referencias": refs,
         "tag_navegacao": "" if n == 8 else TAG_NAVEGACAO,
+        **({"ctr": _ctr_capa(n)} if n in _CTR_IMPACTO else {}),
     }
 
 
@@ -410,6 +422,65 @@ def test_prompt_pt_vazio():
     assert any("prompt_pt vazio" in a for a in validate_prompts(p))
 
 
+# ─── Regra 17: CTR estruturado (slides 1, 2, 4, 5) ───────────────────────────
+
+def test_ctr_ausente_avisa_so_slides_de_capa():
+    p = _payload_valido()
+    for s in p["slides"]:
+        s.pop("ctr", None)
+    avisos = [a for a in validate_prompts(p) if "regra 17" in a]
+    assert len(avisos) == 4  # um por slide de capa, sem crash
+    assert all("sem o objeto" in a for a in avisos)
+
+
+def test_ctr_gatilho_fora_do_conjunto():
+    p = _payload_valido()
+    p["slides"][0]["ctr"]["gatilho_emocional"] = "raiva"
+    avisos = validate_prompts(p)
+    assert any("gatilho_emocional" in a and "regra 17" in a for a in avisos)
+
+
+def test_ctr_texto_impacto_fora_do_tamanho():
+    p = _payload_valido()
+    p["slides"][1]["ctr"]["texto_de_impacto"] = "só uma"
+    avisos = validate_prompts(p)
+    assert any("texto_de_impacto" in a and "3 a 4" in a for a in avisos)
+
+
+def test_ctr_texto_impacto_repete_overlay():
+    p = _payload_valido()
+    p["slides"][0]["ctr"]["texto_de_impacto"] = "a batalha da lição"
+    avisos = validate_prompts(p)
+    assert any("repete palavras" in a and "regra 17" in a for a in avisos)
+
+
+def test_ctr_lado_invalido():
+    p = _payload_valido()
+    p["slides"][3]["ctr"]["lado_negative_space"] = "centro"
+    avisos = validate_prompts(p)
+    assert any("lado_negative_space" in a for a in avisos)
+
+
+def test_ctr_hex_invalido():
+    p = _payload_valido()
+    p["slides"][4]["ctr"]["paleta_complementar"]["destaque"] = "vermelho"
+    avisos = validate_prompts(p)
+    assert any("paleta_complementar" in a and "hex" in a for a in avisos)
+
+
+def test_ctr_par_de_cores_iguais():
+    p = _payload_valido()
+    p["slides"][0]["ctr"]["paleta_complementar"]["contraste"] = "#FFC20E"
+    avisos = validate_prompts(p)
+    assert any("iguais" in a for a in avisos)
+
+
+def test_ctr_gatilho_sem_acento_aceito():
+    p = _payload_valido()
+    p["slides"][0]["ctr"]["gatilho_emocional"] = "Misterio"
+    assert not any("gatilho" in a for a in validate_prompts(p))
+
+
 # ─── Export .txt da série (extensão de automação) ────────────────────────────
 
 def test_formatar_txt_prompts_so_os_8_prompts():
@@ -571,3 +642,20 @@ def test_aviso_3b_aparece_na_validacao_do_payload_real():
     }
     avisos = validate_prompts(payload)
     assert any("regra 3b" in a for a in avisos)
+
+
+def test_validador_detecta_overlay_mutilado_com_pontuacao_pendente():
+    p = _payload_valido()
+    p["slides"][2]["text_overlay"] = "1) Identifique o gatilho da autocobrança: a criança não está brava,"
+    avisos = validate_prompts(p)
+    assert any("pontuação incompleta" in a for a in avisos)
+
+
+def test_direcao_visual_por_eixo_injetada():
+    from prompts import bloco_direcao_visual_eixo
+    b_did = bloco_direcao_visual_eixo("Didático", "didatico")
+    b_comp = bloco_direcao_visual_eixo("Comportamental", "storyteller")
+    b_diag = bloco_direcao_visual_eixo("Diagnóstico", "especialista")
+    assert "SALVAMENTOS" in b_did and "Cheat Sheet" in b_did
+    assert "DIRECT / DM" in b_comp and "Identificação Parental" in b_comp
+    assert "LEADS NO WHATSAPP" in b_diag and "Raio-X Pedagógico" in b_diag

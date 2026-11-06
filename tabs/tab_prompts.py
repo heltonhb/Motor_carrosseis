@@ -6,17 +6,25 @@ Mudanças:
   P1-2: Editor inline de prompts (text_area editável antes de exportar)
 """
 
+from io import BytesIO
 import json
+import zipfile
 
 import streamlit as st
 
 from acervo import avaliar_promocao, promover_para_acervo, resumo_acervo
-from batch_engine import gerar_prompts_ideia, normalizar_prompts
+from batch_engine import (
+    gerar_prompts_ideia,
+    normalizar_prompts,
+    sincronizar_overlay_no_prompt,
+)
 from brief import montar_brief, montar_storyboard, resumo_storyboard, validar_brief
 from config import CORES
+from image_utils import render_carousel_from_prompts
 from prompts import DICAS_SERIE_FLOW, cor_eh_valida, formatar_txt_prompts, validate_prompts
 from refs_catalog import arquivo_principal, rotulos_referencias
 from tabs._ui import api_key_ok, clipboard_button, empty_state, esc, seletor_fidelidade
+from templates import eixo_para_template
 
 
 def _prompts_da_ideia(ideia_id: str) -> dict | None:
@@ -379,12 +387,25 @@ def render():
 
         for slide in prompts.get("slides", []):
             snum = slide.get("slide_num", "?")
+            prompt_en_key = f"edit_prompt_{idx_p}_{snum}"
+            overlay_key = f"edit_overlay_{idx_p}_{snum}"
+
+            # Sincroniza edição do overlay ANTES de instanciar o text_area do prompt_en
+            if (
+                overlay_key in st.session_state
+                and st.session_state[overlay_key] != slide.get("text_overlay", "")
+            ):
+                novo_pen = sincronizar_overlay_no_prompt(
+                    slide, st.session_state[overlay_key]
+                )
+                st.session_state[prompt_en_key] = novo_pen
+                st.session_state[_editor_key] = True
+
             with st.expander(f"Slide {snum} — {slide.get('estilo','')}", expanded=True):
                 c1, c2 = st.columns(2)
                 with c1:
                     st.markdown("**🇺🇸 Prompt (English):**")
                     # P1-2: text_area editável
-                    prompt_en_key = f"edit_prompt_{idx_p}_{snum}"
                     prompt_en_editado = st.text_area(
                         f"Prompt Slide {snum}",
                         value=slide.get("prompt_en", ""),
@@ -403,15 +424,15 @@ def render():
                 with c2:
                     st.markdown("**🇧🇷 Descrição (Português):**")
                     st.markdown(slide.get("prompt_pt", ""))
-                    overlay_key = f"edit_overlay_{idx_p}_{snum}"
                     overlay_editado = st.text_input(
                         f"Texto sobreposto Slide {snum}",
                         value=slide.get("text_overlay", ""),
                         key=overlay_key,
                         label_visibility="collapsed",
+                        help="Editar este texto atualiza automaticamente a cláusula em português dentro do Prompt em inglês.",
                     )
                     if overlay_editado != slide.get("text_overlay", ""):
-                        slide["text_overlay"] = overlay_editado
+                        sincronizar_overlay_no_prompt(slide, overlay_editado)
                         st.session_state[_editor_key] = True
 
                 refs = slide.get("referencias", [])
@@ -427,9 +448,10 @@ def render():
         if st.session_state.get(_editor_key):
             if st.button("💾 Salvar Edições dos Prompts", type="primary", width="stretch", key=f"save_edits_{idx_p}"):
                 from persistence import save_geracao
+                item_p["avisos"] = validate_prompts(prompts, item_p.get("ideia"))
                 save_geracao("prompts", item_p)
                 st.session_state[_editor_key] = False
-                st.success("✅ Edições salvas!")
+                st.success("✅ Edições salvas e sincronizadas com o prompt em inglês!")
                 st.rerun()
 
         # Dicas gerais
@@ -438,7 +460,51 @@ def render():
         if prompts.get("dicas_gerais"):
             st.info(prompts["dicas_gerais"])
 
-        # Exportações
+        # Exportações e Geração Local HD (Alternativa gratuita ao Google Flow)
+        st.divider()
+        st.markdown("### 🖼️ Renderizador Local HD (Alternativa 100% Gratuita ao Google Flow)")
+        st.caption(
+            "Gera imediatamente as 8 lâminas PNG (1080×1350) no padrão visual AutoFlow "
+            "usando as fotos reais do catálogo (`refs/`), paleta da marca e tipografia oficial."
+        )
+        if st.button(
+            "🎨 Renderizar 8 Slides HD Agora (Sem Google Flow)",
+            type="primary",
+            width="stretch",
+            key=f"btn_render_hd_prompts_{idx_p}",
+        ):
+            ideia_ref = item_p.get("ideia") or {}
+            eixo_ref = ideia_ref.get("eixo", "Didático")
+            tkey_ref = eixo_para_template(eixo_ref)
+            with st.spinner("Renderizando 8 lâminas em alta definição (2x supersampling)…"):
+                slides_hd = render_carousel_from_prompts(
+                    prompts,
+                    template_key=tkey_ref,
+                    eixo=eixo_ref,
+                    cta_keyword=ideia_ref.get("cta") or None,
+                )
+                st.session_state[f"_slides_hd_gerados_{idx_p}"] = slides_hd
+
+        slides_hd_cached = st.session_state.get(f"_slides_hd_gerados_{idx_p}")
+        if slides_hd_cached:
+            st.success(f"✅ {len(slides_hd_cached)} lâminas HD (1080×1350) geradas localmente!")
+            cols_hd = st.columns(4)
+            for i_hd, (sn_hd, sb_hd, _info_hd) in enumerate(slides_hd_cached):
+                with cols_hd[i_hd % 4]:
+                    st.image(sb_hd, caption=f"Slide {sn_hd}", width="stretch")
+            zip_hd_buf = BytesIO()
+            with zipfile.ZipFile(zip_hd_buf, "w", zipfile.ZIP_DEFLATED) as zf_hd:
+                for sn_hd, sb_hd, _ in slides_hd_cached:
+                    zf_hd.writestr(f"slide_{sn_hd:02d}.png", sb_hd)
+            st.download_button(
+                "⬇️ Baixar 8 Lâminas HD (ZIP)",
+                data=zip_hd_buf.getvalue(),
+                file_name=f"slides_hd_{titulo_p[:30].replace(' ', '_')}.zip",
+                mime="application/zip",
+                width="stretch",
+                key=f"dl_zip_hd_prompts_{idx_p}",
+            )
+
         st.divider()
         c1, c2 = st.columns(2)
         with c1:

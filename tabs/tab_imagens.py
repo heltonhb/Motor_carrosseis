@@ -11,7 +11,7 @@ import zipfile
 import streamlit as st
 
 from tabs._ui import esc, api_key_ok, empty_state
-from image_utils import create_slide_from_template, add_text_overlay
+from image_utils import create_slide_from_template, add_text_overlay, render_carousel_from_prompts
 from templates import TEMPLATES, eixo_para_template
 
 
@@ -139,4 +139,43 @@ def render() -> None:
                     data=zip_buf.getvalue(),
                     file_name=f"carrossel_{ideia.get('titulo','')[:30].replace(' ','_')}.zip",
                     mime="application/zip",
+                )
+
+    st.divider()
+
+    # ── Modo 4: Colar Prompts do Google Flow (.txt) e Gerar 8 Lâminas HD ───
+    st.markdown("### ⚡ Modo 4 — Gerar Direto dos Prompts do Google Flow (Sem Flow)")
+    st.caption(
+        "Cole abaixo os 8 prompts em inglês (separados por linha em branco). "
+        "O motor extrai automaticamente o `text overlay in Brazilian Portuguese`, "
+        "aplica as fotos reais da unidade (`refs/`) e gera as 8 lâminas 1080×1350."
+    )
+    prompts_txt_raw = st.text_area(
+        "Prompts em inglês (8 blocos separados por linha em branco):",
+        height=200,
+        key="txt_prompts_flow_direto",
+        placeholder="Use the provided reference photo exactly as-is...",
+    )
+    if st.button("🎨 Renderizar Carrossel HD a partir dos Prompts", type="primary", width="stretch", key="btn_modo4_hd"):
+        if not (prompts_txt_raw or "").strip():
+            st.warning("⚠️ Cole os prompts em inglês antes de gerar.")
+        else:
+            with st.spinner("Renderizando lâminas HD (1080×1350)…"):
+                slides_m4 = render_carousel_from_prompts(prompts_txt_raw)
+                st.success(f"✅ {len(slides_m4)} lâminas geradas com sucesso!")
+                cols_m4 = st.columns(4)
+                for idx_m4, (sn_m4, sb_m4, _) in enumerate(slides_m4):
+                    with cols_m4[idx_m4 % 4]:
+                        st.image(sb_m4, caption=f"Slide {sn_m4}", width="stretch")
+                zip_m4 = BytesIO()
+                with zipfile.ZipFile(zip_m4, "w", zipfile.ZIP_DEFLATED) as zf_m4:
+                    for sn_m4, sb_m4, _ in slides_m4:
+                        zf_m4.writestr(f"slide_{sn_m4:02d}.png", sb_m4)
+                st.download_button(
+                    "⬇️ Download Carrossel HD (ZIP)",
+                    data=zip_m4.getvalue(),
+                    file_name="carrossel_hd_prompts.zip",
+                    mime="application/zip",
+                    width="stretch",
+                    key="dl_modo4_zip",
                 )

@@ -56,3 +56,72 @@ print(f"[P2] overlay ok: imagem {img2.size}, texto de 25 palavras quebrado em li
 
 # verifica visualmente que há pixels não-fundo nas bordas? não: só confere dimensão + sem crash
 print("TODOS OS TESTES PASSARAM")
+
+
+def test_card_evita_rosto_na_foto():
+    """Rosto frontal real (Haar) vira cobertura no mapa; o card desce para
+    liberar a cabeça. Usa a foto da unidade, não elipse sintética — Haar só
+    responde a rosto de verdade."""
+    from image_utils import (
+        _H2,
+        _W2,
+        _cover_crop,
+        _mapa_pele,
+        _posicionar_card_sem_rosto,
+        _score_rosto,
+        _selecionar_foto_cena,
+    )
+
+    base = _cover_crop(_selecionar_foto_cena("alunos_apoio", 0), _W2, _H2)
+    mapas = _mapa_pele(base)
+    # Haar precisa ter achado rostos (células com cobertura ≥0.5 no mapa)
+    assert any(v >= 0.5 for linha in mapas[0] for v in linha)
+    box = (115, 380, 965, 955)  # cobria os rostos na posição alta
+    sc0 = _score_rosto(mapas[0], box)
+    novo, dy, antes, depois = _posicionar_card_sem_rosto(mapas, box, -60, 260)
+    assert sc0 > 0.035
+    assert depois < sc0
+    assert novo[1] > box[1]  # desceu para liberar os rostos
+
+
+def test_cabelo_sem_rosto_visivel_tambem_bloqueia_o_card():
+    """Perfil longe da câmera: só cabelo escuro + um pouco de pele. O card não
+    pode pousar sobre a cabeça mesmo quando o rosto quase não aparece."""
+    from PIL import ImageDraw
+
+    from image_utils import _box_toc_cabeca, _mapa_pele, _posicionar_card_sem_rosto
+
+    img = Image.new("RGB", (1080, 1350), (230, 230, 235))
+    d = ImageDraw.Draw(img)
+    d.ellipse((60, 380, 320, 700), fill=(25, 22, 22))      # "cabelo" à esquerda
+    d.ellipse((110, 560, 280, 720), fill=(198, 140, 110))  # rosto na sombra
+    mapas = _mapa_pele(img)
+    box = (115, 420, 965, 945)
+    assert _box_toc_cabeca(mapas[1], box)
+    novo, dy, antes, depois = _posicionar_card_sem_rosto(mapas, box, -100, 280)
+    assert not _box_toc_cabeca(mapas[1], novo)  # posição final não toca cabelo
+
+
+def test_pele_sem_cabelo_nao_movimenta_o_card():
+    """Mão/braço sobre a mesa: pele densa sem cabelo vizinho não é rosto."""
+    from PIL import ImageDraw
+
+    from image_utils import _mapa_pele, _posicionar_card_sem_rosto
+
+    img = Image.new("RGB", (1080, 1350), (230, 230, 235))
+    d = ImageDraw.Draw(img)
+    d.ellipse((420, 600, 700, 900), fill=(198, 140, 110))  # só pele, sem cabelo
+    mapas = _mapa_pele(img)
+    box = (115, 380, 965, 955)
+    novo, dy, antes, depois = _posicionar_card_sem_rosto(mapas, box, -60, 260)
+    assert novo == box and dy == 0
+
+
+def test_card_nao_se_move_em_foto_sem_rosto():
+    from image_utils import _mapa_pele, _posicionar_card_sem_rosto
+
+    img = Image.new("RGB", (1080, 1350), (230, 230, 235))
+    mapas = _mapa_pele(img)
+    box = (115, 420, 965, 945)
+    novo, dy, antes, depois = _posicionar_card_sem_rosto(mapas, box, -100, 280)
+    assert novo == box and dy == 0

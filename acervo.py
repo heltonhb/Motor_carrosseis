@@ -98,13 +98,13 @@ def extrair_dna(ideia: dict, prompts: dict | None = None) -> dict:
 
     estrutura: list[str] = []
     for s in slides:
-        tipo = (s.get("tipo") or "").strip()
+        tipo = (s.get("tipo") or s.get("estilo") or "").strip()
         if tipo and tipo not in estrutura:
             estrutura.append(tipo)
 
     recursos: list[str] = []
     for s in slides:
-        numero = s.get("slide")
+        numero = s.get("slide") if s.get("slide") is not None else s.get("slide_num")
         if s.get("usa_foto_real"):
             recursos.append(f"foto_real_slide_{numero}")
         for chave in s.get("referencias") or []:

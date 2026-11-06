@@ -559,15 +559,70 @@ def test_corte_prefere_frase_inteira_a_fracao_de_palavra():
 
 def test_corte_recua_ate_a_virgula_em_vez_de_quebrar_no_meio():
     # Sem recuo, saía "a criança associa o erro a…" — que lê como erro de escrita.
+    # A vírgula final também é removida para não deixar pontuação pendente na arte.
     from batch_engine import _cortar_overlay
     texto = "Quando a nota baixa é recebida como falha pessoal, a criança associa o erro a uma ameaça."
     cortado, _ = _cortar_overlay(texto, 9)
-    assert cortado == "Quando a nota baixa é recebida como falha pessoal,"
-    assert not cortado.endswith("…")
+    assert cortado == "Quando a nota baixa é recebida como falha pessoal"
+    assert not cortado.endswith((",", ":", ";", "…"))
+
+
+def test_corte_remove_preambulo_burocratico_caso_real():
+    from batch_engine import _cortar_overlay
+    texto = (
+        "Caso real de aluno do Ensino Fundamental atendido na nossa unidade: "
+        "a ansiedade nas avaliações diminuiu visivelmente."
+    )
+    cortado, mudou = _cortar_overlay(texto, 15)
+    assert mudou
+    assert "Caso real" not in cortado
+    assert cortado == "A ansiedade nas avaliações diminuiu visivelmente."
+
+
+def test_corte_nao_termina_em_preposicao_ou_negacao_solta():
+    from batch_engine import _cortar_overlay
+    texto = "O erro de cálculo no Ensino Fundamental não define inteligência."
+    cortado, mudou = _cortar_overlay(texto, 8)
+    assert mudou
+    assert not cortado.endswith("não…")
+    assert cortado == "O erro de cálculo no Ensino Fundamental…"
+
+
+def test_sincronizar_overlay_no_prompt_atualiza_prompt_en():
+    from batch_engine import sincronizar_overlay_no_prompt
+    slide = {
+        "slide_num": 1,
+        "prompt_en": (
+            f"{FRASE_FOTO_REAL} Bold Brand Blue #007799 "
+            "text overlay in Brazilian Portuguese: 'Texto antigo'. "
+            f"No cartoon characters. {_FRASE_TAG}"
+        ),
+        "text_overlay": "Texto antigo",
+    }
+    novo_pen = sincronizar_overlay_no_prompt(slide, "Novo gancho de capa!")
+    assert slide["text_overlay"] == "Novo gancho de capa!"
+    assert "text overlay in Brazilian Portuguese: 'Novo gancho de capa!'" in novo_pen
+    assert "Texto antigo" not in novo_pen
+
+
+def test_slide1_com_fachada_nao_duplica_clausula_depoimento():
+    slide = {
+        "slide_num": 1,
+        "prompt_en": (
+            f"{FRASE_FOTO_REAL} Bold Brand Blue #007799 "
+            "text overlay in Brazilian Portuguese: 'Ele rasgou a prova?'. "
+            f"No cartoon characters. {FRASE_FACHADA} {_FRASE_TAG}"
+        ),
+        "text_overlay": "Ele rasgou a prova?",
+        "prompt_pt": "Capa",
+        "referencias": ["fachada", "logo"],
+    }
+    _garantir_regras(slide, None)
+    assert FRASE_FOTO_REAL in slide["prompt_en"]
+    assert "testimonial cards" not in slide["prompt_en"]
 
 
 def test_thumbnail_tem_limite_mais_apertado():
-    slide = {"slide_num": 1, "prompt_en": "", "text_overlay": ""}
     assert _limite_overlay(1) == 8
     assert _limite_overlay(3) == 15
 
@@ -602,3 +657,88 @@ def test_overlay_longo_e_registrado_nas_correcoes():
     _garantir_regras(slide, corrigidos)
     assert len(slide["text_overlay"].split()) <= 15
     assert any("encurtado" in c for c in corrigidos), "corte de texto tem que ser visível"
+
+
+# ─── Regra 17: backfill determinístico de ctr ────────────────────────────────
+
+def _slide_capa(n: int = 1, overlay: str = "Notas altas não explicam tudo") -> dict:
+    return {
+        "slide_num": n,
+        "prompt_en": f"A photo of the classroom. Text overlay: \"{overlay}\"",
+        "text_overlay": overlay,
+        "prompt_pt": "A virada chega quando a criança se explica em voz alta.",
+    }
+
+
+def test_ctr_backfill_completa_e_registra():
+    from prompts import GATILHOS_CTR, LADOS_CTR
+
+    slide = _slide_capa(1)
+    corrigidos: list[str] = []
+    _garantir_regras(slide, corrigidos, eixo="Didático")
+    ctr = slide["ctr"]
+    assert ctr["gatilho_emocional"] in GATILHOS_CTR
+    assert ctr["gatilho_emocional"] == "mistério"  # default do eixo Didático
+    assert ctr["lado_negative_space"] in LADOS_CTR
+    assert 3 <= len(ctr["texto_de_impacto"].split()) <= 4
+    assert set(ctr["paleta_complementar"]) == {"destaque", "contraste"}
+    assert any("regra 17" in c for c in corrigidos), "backfill de ctr tem que ser visível"
+
+
+def test_ctr_backfill_idempotente():
+    slide = _slide_capa(4)
+    _garantir_regras(slide, [], eixo="Diagnóstico")
+    primeiro = dict(slide["ctr"])
+    corrigidos: list[str] = []
+    _garantir_regras(slide, corrigidos, eixo="Diagnóstico")
+    assert slide["ctr"] == primeiro
+    assert not [c for c in corrigidos if "regra 17" in c]
+
+
+def test_ctr_invalido_normalizado():
+    slide = _slide_capa(5)
+    slide["ctr"] = {
+        "gatilho_emocional": "RAIVA",
+        "texto_de_impacto": "só duas",
+        "lado_negative_space": "centro",
+        "paleta_complementar": {"destaque": "#FFC20E", "contraste": "#FFC20E"},
+    }
+    corrigidos: list[str] = []
+    _garantir_regras(slide, corrigidos, eixo="Comportamental")
+    ctr = slide["ctr"]
+    from prompts import CTR_PALETE_PADRAO, GATILHOS_CTR
+
+    assert ctr["gatilho_emocional"] in GATILHOS_CTR
+    assert 3 <= len(ctr["texto_de_impacto"].split()) <= 4
+    assert ctr["lado_negative_space"] == "direita"  # padrão do slide 5
+    assert ctr["paleta_complementar"] == CTR_PALETE_PADRAO
+    assert any("regra 17" in c for c in corrigidos)
+
+
+def test_ctr_so_nas_laminas_de_capa():
+    slide = _slide_capa(3)
+    _garantir_regras(slide, [], eixo="Didático")
+    assert "ctr" not in slide
+
+
+def test_ctr_texto_impacto_nao_repete_overlay():
+    from prompts import _tokens_significativos
+
+    overlay = "Notas altas não explicam tudo"
+    slide = _slide_capa(1, overlay)
+    slide["ctr"] = {
+        "gatilho_emocional": "surpresa",
+        "texto_de_impacto": "as notas explicam pouco",
+        "lado_negative_space": "esquerda",
+        "paleta_complementar": {"destaque": "#FFC20E", "contraste": "#F58220"},
+    }
+    _garantir_regras(slide, [], eixo="Didático")
+    impacto = slide["ctr"]["texto_de_impacto"]
+    assert not (_tokens_significativos(impacto) & _tokens_significativos(overlay))
+
+
+def test_enforce_foto_real_propaga_eixo_para_ctr():
+    dados = {"slides": [_slide_capa(1)]}
+    corrigidos: list[str] = []
+    res = _enforce_foto_real(dados, corrigidos=corrigidos, eixo="Comportamental")
+    assert res["slides"][0]["ctr"]["gatilho_emocional"] == "urgência"

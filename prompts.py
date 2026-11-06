@@ -10,6 +10,7 @@ Engenharia de prompts v3:
 
 import json
 import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -560,6 +561,64 @@ def bloco_fidelidade(fidelidade: str | None = None, tem_imagem: bool = True) -> 
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIREÇÃO VISUAL POR EIXO E TOM DE VOZ (PSICOLOGIA DE ENGAJAMENTO)
+# ═══════════════════════════════════════════════════════════════════════════════
+# O layout que gera Salvamento (Didático) é diferente do que gera Envio por DM
+# (Comportamental) ou Lead no WhatsApp (Diagnóstico). Este bloco adapta a
+# arquitetura visual das lâminas 2 a 8 ao KPI e ao registro de voz do carrossel.
+
+DIRECAO_VISUAL_POR_EIXO: dict[str, str] = {
+    "Didático": (
+        "META PRIMÁRIA: SALVAMENTOS (≥ 4%). Desenhe os slides 3 a 6 com estética "
+        "de 'Guia Prático de Bolso / Cheat Sheet' que o pai salva para consultar "
+        "na semana de provas: cards numerados ultra-escaneáveis, comparativos "
+        "visuais claros ('Erro Comum vs. Como Destravar'), badges de passo a "
+        "passo (1, 2, 3) em círculos coloridos e ícones minimalistas funcionais. "
+        "No Slide 8 (CTA), destaque visualmente o ícone e o convite 'Salve para "
+        "consultar antes da prova'."
+    ),
+    "Comportamental": (
+        "META PRIMÁRIA: ENVIOS POR DIRECT / DM (≥ 2,5%). Desenhe os slides 2 a 6 "
+        "com estética de 'Identificação Parental & Contraste Emocional': foco em "
+        "micro-cenas domésticas reconhecíveis e tipografia editorial com grifo "
+        "marca-texto amarelo (#FFC20E) na frase-chave que faz uma mãe enviar o "
+        "slide para o parceiro ('olha isso aqui') ou grupo de mães do colégio. "
+        "No Slide 8 (CTA), destaque visualmente o ícone de aviãozinho/Direct "
+        "('Envie para quem divide a rotina de estudos com você')."
+    ),
+    "Diagnóstico": (
+        "META PRIMÁRIA: LEADS NO WHATSAPP (15-25/semana). Desenhe os slides 3 a 6 "
+        "com estética de 'Raio-X Pedagógico / Sinais de Alerta': estruture os "
+        "cards como sinais observáveis (Sinal #1, Sinal #2) com badges de alerta "
+        "em laranja/amarelo (#F58220 / #FFC20E) e contraste claro entre sintoma "
+        "em casa e causa pedagógica real, conduzindo naturalmente à urgência da "
+        "avaliação pedagógica ou aula experimental gratuita no Slide 8."
+    ),
+}
+
+
+def bloco_direcao_visual_eixo(eixo: str | None = None, tom: str | None = None) -> str:
+    """
+    Injeta a direção de arte específica do eixo (KPI) e o registro de voz
+    para a síntese dos text_overlays no prompt de geração de imagens.
+    """
+    eixo_norm = (eixo or "").strip()
+    direcao = DIRECAO_VISUAL_POR_EIXO.get(
+        eixo_norm,
+        DIRECAO_VISUAL_POR_EIXO["Didático"],
+    )
+    tom_efetivo = resolver_tom(tom, eixo_norm or None)
+    spec_tom = TONES[tom_efetivo]
+    return (
+        f"\n\n─── 🎯 DIREÇÃO DE ARTE POR EIXO ({eixo_norm or 'Didático'}) E VOZ ({spec_tom['rotulo']}) ───\n"
+        f"• ARQUITETURA VISUAL DE ENGAJAMENTO: {direcao}\n"
+        f"• VOZ DOS TEXT_OVERLAYS: adapte a síntese de cada text_overlay ao registro "
+        f"'{spec_tom['rotulo']}' — frases completas, naturais e com impacto imediato "
+        "no celular, nunca truncadas.\n"
+    )
+
+
 # ─── Validador de Diversidade e Hooks ─────────────────────────────────────────
 def validate_idea_diversity(ideias: list[dict]) -> list[str]:
     """
@@ -689,6 +748,34 @@ FRASE_FOTO_REAL = (
     "photograph itself must remain untouched and photorealistic."
 )
 
+# ─── CTR estruturado (regra 17) ──────────────────────────────────────────────
+# Diretrizes de thumbnail viram metadado por slide: o validador confere, o
+# batch_engine preenche defaults e o render local consome (cor do grifo e lado
+# do negative space). Slides de capa: 1, 4 e 5 + slide 2 (2ª impressão do
+# algoritmo). Aspect ratio do carrossel é 4:5 — nunca 16:9.
+SLIDES_CTR = {1, 2, 4, 5}
+GATILHOS_CTR = ("surpresa", "mistério", "urgência", "superação")
+LADOS_CTR = ("esquerda", "direita")
+GATILHO_POR_EIXO = {
+    "Didático": "mistério",
+    "Comportamental": "urgência",
+    "Diagnóstico": "surpresa",
+}
+CTR_LADO_PADRAO = {1: "esquerda", 2: "direita", 4: "esquerda", 5: "direita"}
+CTR_PALETE_PADRAO = {"destaque": "#FFC20E", "contraste": "#F58220"}
+
+
+def normalizar_gatilho(valor) -> str:
+    """Minúsculas sem acento para comparar gatilhos ('Superação' → 'superacao')."""
+    if not isinstance(valor, str):
+        return ""
+    t = unicodedata.normalize("NFKD", valor.strip().lower())
+    return "".join(c for c in t if not unicodedata.combining(c))
+
+
+def gatilho_eh_valido(valor) -> bool:
+    return normalizar_gatilho(valor) in {normalizar_gatilho(g) for g in GATILHOS_CTR}
+
 
 def cor_eh_valida(cor) -> bool:
     """True se `cor` é um hex CSS seguro (#RGB/#RRGGBB) para style/HTML."""
@@ -761,6 +848,7 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
     - último slide com o WhatsApp (CTA inviolável)
     - com a ideia de origem: overlay deriva do texto aprovado do slide (fidelidade)
     - paleta com valores hex válidos (swatch do app só pinta hex — safety anti-XSS)
+    - slides 1, 2, 4 e 5 com objeto "ctr" coerente (regra 17 — CTR estruturado)
     - base_prompt presente, com os hexes da marca e sem texto de slide específico
     Retorna lista de avisos — vazia quando tudo está certo.
     """
@@ -948,6 +1036,60 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
             if len(overlay.split()) > 8:
                 avisos.append(f"⚠️ Slide {snum}: thumbnail deve ter texto curto de até 8 palavras.")
 
+        # ── Regra 17: CTR estruturado (slides 1, 2, 4 e 5) ──
+        try:
+            snum_ctr = int(snum)
+        except (TypeError, ValueError):
+            snum_ctr = None
+        if snum_ctr in SLIDES_CTR:
+            ctr = slide.get("ctr")
+            if not isinstance(ctr, dict):
+                avisos.append(
+                    f'⚠️ Slide {snum}: sem o objeto "ctr" — o motor preencherá os '
+                    "padrões do eixo, mas defina gatilho/impacto/lado/paleta (regra 17)."
+                )
+            else:
+                if not gatilho_eh_valido(ctr.get("gatilho_emocional")):
+                    avisos.append(
+                        f"⚠️ Slide {snum}: ctr.gatilho_emocional {ctr.get('gatilho_emocional')!r} "
+                        f"fora de {GATILHOS_CTR} (regra 17)."
+                    )
+                impacto = (ctr.get("texto_de_impacto") or "").strip()
+                n_impacto = len(impacto.split())
+                if not 3 <= n_impacto <= 4:
+                    avisos.append(
+                        f"⚠️ Slide {snum}: ctr.texto_de_impacto com {n_impacto} palavras — "
+                        "o limite é 3 a 4 (regra 17)."
+                    )
+                elif overlay:
+                    compartilhadas = (
+                        _tokens_significativos(impacto) & _tokens_significativos(overlay)
+                    )
+                    if compartilhadas:
+                        avisos.append(
+                            f"⚠️ Slide {snum}: ctr.texto_de_impacto repete palavras do "
+                            f"text_overlay ({', '.join(sorted(compartilhadas))}) — deve "
+                            "complementar, não repetir o título (regra 17)."
+                        )
+                if (ctr.get("lado_negative_space") or "").strip().lower() not in LADOS_CTR:
+                    avisos.append(
+                        f'⚠️ Slide {snum}: ctr.lado_negative_space deve ser "esquerda" '
+                        f'ou "direita" (regra 17).'
+                    )
+                paleta_ctr = ctr.get("paleta_complementar")
+                if not isinstance(paleta_ctr, dict) or not all(
+                    cor_eh_valida(paleta_ctr.get(k)) for k in ("destaque", "contraste")
+                ):
+                    avisos.append(
+                        f"⚠️ Slide {snum}: ctr.paleta_complementar precisa de "
+                        "destaque e contraste em hex #RRGGBB (regra 17)."
+                    )
+                elif paleta_ctr["destaque"].lower() == paleta_ctr["contraste"].lower():
+                    avisos.append(
+                        f"⚠️ Slide {snum}: ctr.paleta_complementar com as duas cores "
+                        "iguais — o par deve ser complementar de alto contraste (regra 17)."
+                    )
+
         # ── Regra 11: referências de imagem por slide (catálogo refs/catalogo.json) ──
         refs = slide.get("referencias")
         if not isinstance(refs, list) or not refs:
@@ -969,7 +1111,7 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                 avisos.append('⚠️ Slide 7: "referencias" deve incluir "fachada" (regra 11).')
 
         # ── Regra 12: fachada intocável — foto de referência só recebe legenda ──
-        if isinstance(refs, list) and "fachada" in refs:
+        if isinstance(refs, list) and "fachada" in refs and snum not in {1, 4, 5}:
             if FRASE_FACHADA.lower() not in pen_low:
                 avisos.append(
                     f'⚠️ Slide {snum}: prompt_en sem a cláusula de fachada intocável '
@@ -987,6 +1129,13 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
                     "proibido (marca registrada)."
                 )
 
+        # Frase mutilada terminando em pontuação pendente (vírgula, dois-pontos, etc.)
+        if overlay and overlay[-1] in {",", ";", ":", "—", "-"}:
+            avisos.append(
+                f"⚠️ Slide {snum}: text_overlay termina com pontuação incompleta ({overlay[-1]!r}) "
+                "— reescreva como frase completa e autossuficiente (regra 8)."
+            )
+
         # Fidelidade: overlay deve derivar do texto aprovado do slide correspondente
         texto_orig = ideia_slides.get(slide.get("slide_num"))
         if texto_orig and overlay:
@@ -994,7 +1143,7 @@ def validate_prompts(dados: dict, ideia: dict | None = None) -> list[str]:
             orig = _tokens_significativos(texto_orig)
             if len(ov) >= 3 and orig:
                 inter = len(ov & orig) / len(ov)
-                if inter < 0.4:
+                if inter < 0.25:
                     avisos.append(
                         f"⚠️ Slide {snum}: text_overlay não deriva do texto aprovado "
                         f"({inter:.0%} de palavras em comum) — revise a fidelidade ao roteiro (regra 8)."
@@ -1031,32 +1180,32 @@ Estas são as ÚNICAS fotos reais da unidade que podem ser sugeridas como refer�
 Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de imagens nem cenas inventadas.
 
 ─── ESTRUTURA POR TIPO DE SLIDE (tipos canônicos iguais aos do roteiro: 1 Capa, 2 Segunda Capa, 3-5 Entrega, 6 Ponte, 7 Prova, 8 CTA — com a referência típica de cada lâmina) ───
-• SLIDE 1 (Capa / Thumbnail de abertura — FOTO REAL OBRIGATÓRIA; referência típica: "fachada" ou "recepcao_unidade"): composição profissional SOBRE a foto de referência da unidade (como um designer faria no Photoshop). A foto real entra como camada de fundo full-bleed, intacta e photorealistic — NÃO é regenerada nem recriada. Sobre ela, componha: texto curto de 3-8 palavras em tipografia geométrica de impacto (Azul Brand #007799, com marca-texto amarelo #FFC20E), legível no celular, centralizado na Safe Zone 1:1 (1080×1080 px). Selo do logo no rodapé. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL — NUNCA "Authentic school photo of..." nem fundo genérico/gerado por IA.
-• SLIDE 2 (Segunda Capa; referência típica: a cena de atividade que traduz o tema — ex.: "alunos_robotica" para um carrossel de robótica, "aluno_programacao" para programação, "alunos_apoio" para apoio escolar): Fundo contrastante em Azul Brand (#007799 / #0084B4), tipografia branca e amarelo vibrante, transições orgânicas em curva — funciona como capa alternativa no feed.
-• SLIDE 3 (Entrega; referência típica: a cena da disciplina do tema, ex.: "alunos_apoio", "alunos_robotica", "aluno_programacao"): Cards disciplinares flutuantes (branco puro #FFFFFF com toques pastel da disciplina: azul claro, laranja, coral ou verde lima), diagramas, passos com ícones minimalistas em círculos coloridos.
-• SLIDE 4 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + texto curto de 3-8 palavras compondo sobre a foto. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
-• SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + texto curto de 3-8 palavras compondo sobre a foto. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
-• SLIDE 6 (Ponte; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + texto sobre metodologia individualizada (#1E293B).
-• SLIDE 7 (Prova / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Composição profissional SOBRE a foto da fachada da Rua Coelho Lisboa, 783. A foto entra como camada de fundo full-bleed, intacta — proibido redesenhar, reestilizar, recolorir ou regenerar. Sobre ela: cartão de depoimento/prova social com bordas arredondadas + legenda. O prompt_en DEVE conter a cláusula FRASE_FACHADA.
-• SLIDE 8 (CTA; referência típica: "logo"): Fundo suave, botão pill em Verde Ação (#58B947) oferecendo SEMPRE uma aula experimental gratuita (em posts de tecnologia: Robótica ou Programação) ou avaliação pedagógica gratuita (em posts de apoio escolar: Português ou Matemática) e pedindo para entrar em contato via WhatsApp oficial (11) 94475-0009, ícones minimalistas de salvar + compartilhar DM.
+• SLIDE 1 (Capa / Thumbnail de abertura — FOTO REAL OBRIGATÓRIA; referência típica: "recepcao_unidade" ou a cena do curso como "alunos_apoio", "alunos_robotica", "aluno_programacao" — reserve "fachada" preferencialmente para o Slide 7): composição profissional SOBRE a foto de referência da unidade (como um designer faria no Photoshop). A foto real entra como camada de fundo full-bleed, intacta e photorealistic — NÃO é regenerada nem recriada. Sobre ela, inclua proteção de leitura (subtle dark/brand-blue gradient scrim ou card translúcido atrás do texto) e componha: texto curto completo de 4-8 palavras (fórmula [Sintoma Cotidiano] + [Quebra de Expectativa]) em tipografia geométrica de impacto (Azul Brand #007799 ou branco sobre scrim, com marca-texto amarelo #FFC20E nas 2 palavras-chave de tensão), legível no celular, centralizado na Safe Zone 1:1 (1080×1080 px). Selo do logo no rodapé. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL — NUNCA "Authentic school photo of..." nem fundo genérico/gerado por IA.
+• SLIDE 2 (Segunda Capa / 2ª Impressão do Algoritmo; referência típica: a cena de atividade que traduz o tema — ex.: "alunos_robotica", "aluno_programacao", "alunos_apoio"): O Instagram reexibe o carrossel abrindo pelo Slide 2 para quem não deslizou na 1ª impressão. Fundo contrastante em Azul Brand (#007799 / #0084B4), tipografia branca ultra-legível com 1-2 palavras-chave grifadas em amarelo vibrante (#FFC20E), transições orgânicas em curva e elemento visual de open loop (seta ou conector direcional) que puxa o olhar para o Slide 3.
+• SLIDE 3 (Entrega Escaneável; referência típica: a cena da disciplina do tema, ex.: "alunos_apoio", "alunos_robotica", "aluno_programacao"): Cards disciplinares flutuantes (branco puro #FFFFFF com toques pastel da disciplina: azul claro, laranja, coral ou verde lima), diagramas, checklist ou passos numerados com ícones minimalistas em círculos coloridos — desenhado para gerar SALVAMENTO imediato.
+• SLIDE 4 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "alunos_robotica" ou "alunos_apoio"): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + proteção de leitura (scrim/card translúcido) + frase completa e autossuficiente de 4-8 palavras que entrega a síntese do insight (nunca frase cortada na metade). O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
+• SLIDE 5 (Entrega — Thumbnail de aplicação — FOTO REAL OBRIGATÓRIA; referência típica: "aluno_programacao" ou a cena da disciplina do tema): MESMA RECEITA DO SLIDE 1 — composição profissional sobre a foto de referência (camada de fundo intacta) + proteção de leitura (scrim/card translúcido) + frase imperativa completa de 4-8 palavras compondo sobre a foto. O prompt_en DEVE conter a cláusula FRASE_FOTO_REAL.
+• SLIDE 6 (Ponte Metodológica; referência típica: "alunos_robotica", "alunos_apoio", "equipe" ou "laboratorio"): Grid com fotos reais dos alunos em molduras arredondadas (16px) e sombras suaves + badge discreto de localização ("Rua Coelho Lisboa, 783 • Tatuapé") descrito no prompt_en. ⚠️ No text_overlay do Slide 6, NUNCA gaste as palavras apenas com o endereço: escreva o MECANISMO DE TRANSFORMAÇÃO do método individualizado da unidade em uma frase completa.
+• SLIDE 7 (Prova Social / Escola Real; referência obrigatória: "fachada", podendo somar "equipe"): Composição profissional SOBRE a foto da fachada da Rua Coelho Lisboa, 783. A foto entra como camada de fundo full-bleed, intacta — proibido redesenhar, reestilizar, recolorir ou regenerar. Sobre ela: cartão de depoimento/prova social com bordas arredondadas, badge superior "Caso Real • Ensino Fundamental" descrito no prompt_en. ⚠️ No text_overlay do Slide 7, NUNCA use o preâmbulo burocrático ("Caso real de aluno atendido na unidade:"): coloque no text_overlay diretamente o RESULTADO / TRANSFORMAÇÃO CONCRETA vivida pela família. O prompt_en DEVE conter a cláusula FRASE_FACHADA.
+• SLIDE 8 (CTA Hierárquico + Loop de Retenção; referência típica: "logo"): Fundo suave (#F7F9FF) estruturado em 3 níveis visuais claros descritos no prompt_en: (1) Headline convidativa oferecendo SEMPRE aula experimental gratuita (em posts de tecnologia: Robótica ou Programação) ou avaliação pedagógica gratuita (em posts de apoio escolar: Português ou Matemática) + palavra-chave de comentário; (2) Botão pill central em Verde Ação (#58B947) em alto destaque com o WhatsApp oficial (11) 94475-0009; (3) Barra inferior de engajamento orgânico com ícones destacados de Salvar 📌 ("Salve para consultar") e Enviar por Direct ✈️ ("Envie para outro responsável").
 
 ─── REGRAS DO PROMPT ───
 1. prompt_en em INGLÊS, text_overlay em PORTUGUÊS DO BRASIL.
 2. ⛔ SLIDES 1, 4 e 5 — COMPOSIÇÃO SOBRE FOTO REAL (REGRA PRIORITÁRIA, leia antes de qualquer outra):
    Esses 3 slides são composições profissionais SOBRE a foto de referência da unidade (estilo Photoshop/editing). A foto real entra como camada de fundo full-bleed, intacta e photorealistic — NÃO é regenerada, recriada, reestilizada nem substituída pela IA. O prompt_en desses slides DEVE OBRIGATORIAMENTE:
    (a) CONTER a cláusula FRASE_FOTO_REAL que instrui o modelo a usar a foto como camada fixa e compor elementos por cima;
-   (b) Descrever a composição: o que vai SOBRE a foto (texto, badge do logo, elementos gráficos mínimos);
-   (c) Incluir o texto curto (3-8 palavras) como overlay tipográfico SOBRE a foto;
+   (b) Descrever a composição: proteção de contraste (subtle gradient scrim ou translucent floating pill) + o que vai SOBRE a foto (texto, badge do logo, elementos gráficos mínimos);
+   (c) Incluir o texto curto completo (3-8 palavras, com sentido fechado) como overlay tipográfico SOBRE a foto;
    (d) Marcar "usa_foto_real": true e "tipo_foto" com UMA cena fotográfica do catálogo (ex.: "recepcao_unidade", "alunos_robotica", "aluno_programacao", "alunos_apoio") no JSON.
    ⛔ PROIBIDO nos slides 1, 4 e 5: "Authentic school photo of..." (a IA recria a cena), "soft off-white background", "floating white card", "soft background", fundo liso genérico ou cena 100% gerada por IA. Esses elementos são exclusivos dos slides 2, 3, 6, 7 e 8.
-   ✅ CORRETO (slide 1): "Use the provided reference photo exactly as-is as the full-bleed background photograph — do not regenerate, redraw, restyle, or replace the scene. Compose ONLY typographic overlays and minimal graphic elements on top of the photograph, like a professional photo-editor would in Photoshop. The photograph itself must remain untouched and photorealistic. Bold Brand Blue #007799 text overlay in Brazilian Portuguese: 'Seu filho programa o futuro dele.' No cartoon characters."
+   ✅ CORRETO (slide 1): "Use the provided reference photo exactly as-is as the full-bleed background photograph — do not regenerate, redraw, restyle, or replace the scene. Compose ONLY typographic overlays and minimal graphic elements on top of the photograph, like a professional photo-editor would in Photoshop. The photograph itself must remain untouched and photorealistic. Subtle dark gradient scrim behind text for mobile contrast. Bold Brand Blue #007799 text overlay in Brazilian Portuguese: 'Seu filho programa o futuro dele.' No cartoon characters."
    ❌ ERRADO (slide 1): "Authentic school photo of students working on robotics at a yellow table..." (a IA gera uma foto nova em vez de compor sobre a referência)
 3. ESTÉTICA DOS SLIDES 2, 3, 6, 7 e 8 (NÃO se aplica aos slides 1, 4 e 5 — eles usam foto real, veja regra 2). No prompt_en desses slides: descreva explicitamente a estética (modern friendly geometric sans-serif typography, centered elements respecting a 1:1 square safe zone for Instagram grid preview, floating white cards with 16-24px rounded corners, subtle diffuse shadows, soft off-white background #F7F9FF, Brand Blue #007799 headers, Action Green #58B947 pill buttons for CTAs, vibrant yellow/orange #FFC20E highlights, pastel cards, organic curve transitions, minimalist line icons in colored circles).
-4. text_overlay: máximo 15 palavras, fonte bold, legível em celular.
+4. text_overlay: máximo 15 palavras (máximo 8 palavras nos slides 1, 4 e 5), fonte bold, legível em celular.
 5. No prompt_en, inclua EXATAMENTE UMA vez, copiada sem paráfrase: "text overlay in Brazilian Portuguese: [TEXTO]" — nunca troque o início por "highlight/overlay ... in Brazilian Portuguese" e nunca repita a instrução de texto sobreposto na mesma lâmina (uma única vez, sempre com o mesmo texto de text_overlay).
 6. TAG DE NAVEGAÇÃO — GERADA JUNTO COM A IMAGEM: o prompt_en dos slides 1 a 7 DEVE incluir uma frase em inglês instruindo o texto discreto no canto inferior direito, exatamente neste formato: "In the bottom right corner, a small discreet text in Brazilian Portuguese says '{TAG_NAVEGACAO}'." A tag é PT-BR e nunca é traduzida (proibido "Swipe" e "Arraste para o lado"), NUNCA faz parte do text_overlay e NUNCA aparece no slide 8. No campo "tag_navegacao" use exatamente "{TAG_NAVEGACAO}" nos slides 1 a 7 e uma string vazia no slide 8.
 7. PERSONAGENS — REGRA DUPLA: PERMITIDO (fotográfico) referenciar o logo oficial "Ensina Mais Turma da Mônica" e o painel real da fachada — use como referência fiel, não os recrie. PROIBIDO (gerado): em todo prompt_en declare "no cartoon characters — generic minimalist line-art icons only" e NUNCA gere nem mencione personagens (Mônica, Cebolinha, Cascão, Magali, Franjinha, Nimbus, Bidu, Chico Bento, Pit Lelé, Anabela, Aurélia ou qualquer outro) — em NENHUM campo, nem em português nem em inglês (prompt_en, prompt_pt, text_overlay, estilo, base_prompt, dicas_gerais): se o tema pedir personagem, descreva alunos genéricos. A marca no nome do logo é permitida; os personagens, nunca.
-8. FIDELIDADE AO ROTEIRO: o contexto traz a lista "Slides" com o campo "texto" de cada lâmina aprovada. Cada text_overlay DEVE ser um resumo de até 15 palavras DO TEXTO DO SLIDE CORRESPONDENTE (mesmo gancho e mensagem) — NUNCA invente frases que não estejam no roteiro.
+8. FIDELIDADE AO ROTEIRO COM SÍNTESE COPYWRITER (PROIBIDO FRASES CORTADAS): o contexto traz a lista "slides_sugeridos" com o campo "texto" de cada lâmina aprovada. Cada text_overlay DEVE condensar a ideia completa (premissa + conclusão) daquele slide em uma frase FECHADA, gramaticalmente completa e autossuficiente (3-8 palavras nos slides 1, 4 e 5; até 15 palavras nos demais), preservando as palavras-chave centrais do slide. ⛔ É TERMINANTEMENTE PROIBIDO copiar apenas o início de uma frase longa deixando o pensamento incompleto, ou terminar o text_overlay em vírgula (,), dois-pontos (:), ponto-e-vírgula (;) ou preposição.
 9. BASE_PROMPT PARA CONSISTÊNCIA: gere também o campo "base_prompt" (em inglês) com APENAS o estilo compartilhado das 8 lâminas — fundo, tipografia, paleta com os hexes #007799, #58B947 e #FFC20E, bordas, sombras, ícones e transições. SEM texto sobreposto e SEM elementos de um slide específico: tem que valer igual para todas as lâminas.
 10. "dicas_gerais" — ESPECÍFICO DESTE CARROSSEL: registre só o que muda de uma geração para outra: a ordem das 8 lâminas, qual referência de foto usar em cada uma e algum cuidado particular do tema. A receita de coesão (gerar o SLIDE 1 primeiro e usá-lo como imagem de referência/estilo para os slides 2 a 8 no Google Flow) é FIXA e vem do próprio app — não repita aqui.
 11. REFERÊNCIA DE IMAGEM POR SLIDE (campo "referencias"): para CADA slide escolha 1 ou 2 chaves do catálogo de fotos acima — é o que o usuário vai anexar como imagem de referência no Google Flow para gerar aquela lâmina. Regras:
@@ -1064,7 +1213,7 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
    (b) slide 7: deve incluir "fachada";
    (c) a cena deve traduzir o CONTEÚDO do slide (robótica → "alunos_robotica"; programação → "aluno_programacao"; apoio/reforço → "alunos_apoio"; identidade/prova → "fachada");
    (d) use EXATAMENTE as chaves do catálogo, em minúsculas — qualquer valor fora da lista é inválido.
-12. FACHADA INTOCÁVEL: quando "fachada" estiver nas "referencias" de um slide (sempre no 7), o prompt_en DEVE conter exatamente esta cláusula: "{FRASE_FACHADA}" — a foto de referência NUNCA é modificada, só recebe legenda/cartão por cima.
+12. FACHADA INTOCÁVEL: quando "fachada" estiver nas "referencias" do slide 7 (ou em slides não-thumbnail), o prompt_en DEVE conter exatamente esta cláusula: "{FRASE_FACHADA}" — a foto de referência NUNCA é modificada, só recebe legenda/cartão por cima.
 13. SLIDE 8 (CTA FINAL): O Slide final (text_overlay e prompt_en) DEVE SEMPRE oferecer uma aula experimental gratuita (em posts de tecnologia: Robótica ou Programação) ou avaliação pedagógica gratuita (em posts de apoio escolar: Português ou Matemática) e pedir para entrar em contato via WhatsApp da unidade (11) 94475-0009.
 
 ─── DIRETRIZES DE PROMPT CRAFT — GOOGLE FLOW / IMAGEFX / IMAGEN ───
@@ -1075,7 +1224,9 @@ Nada fora desta lista existe como ativo: nunca cite fotos genéricas de banco de
    (d) LIGHTING & COLOR — tipo de luz (ex.: "golden hour light", "soft diffused daylight", "volumetric lighting") e paleta dominante com os hexes da marca;
    (e) COMPOSITION — enquadramento (ex.: "wide shot", "close-up", "rule of thirds", "low angle", "1:1 safe zone centered").
 15. ⛔ BUZZWORDS GENÉRICAS (filtro de qualidade): não use "photorealistic", "4K", "hyperrealistic", "ultra detailed", "high quality", "masterpiece" nem advérbios vazios como atalho de estilo — no lugar, descreva textura, iluminação e óptica concretas. Exceção única: as cláusulas FRASE_FOTO_REAL e FRASE_FACHADA, transcritas literalmente, mantêm o termo "photorealistic" porque ali ele significa "foto intocada", não estilo.
-16. Se o estilo não vier definido pelo padrão visual, adote o que melhor valoriza o conceito: fotografia para cenas reais da unidade e arte gráfica/editorial para diagramas e cards — nunca uma estética genérica de banco de imagens."""
+16. Se o estilo não vier definido pelo padrão visual, adote o que melhor valoriza o conceito: fotografia para cenas reais da unidade e arte gráfica/editorial para diagramas e cards — nunca uma estética genérica de banco de imagens.
+17. THUMBNAIL CTR (slides 1, 4 e 5 — CTR de capa): aplicar as diretrizes de thumbnail de alto CTR mesmo na composição sobre foto real: (a) emoção dominante que atrai clique (surpresa, mistério, urgência, superação) refletida na expressão/pose do sujeito quando houver pessoa; (b) paleta de DUAS cores complementares de alto contraste (ex.: Ciano+Laranja, Amarelo+Roxo Escuro) aplicadas nos destaques do overlay; (c) texto de apoio curto de no máximo 3 a 4 palavras que complemente o título sem repeti-lo; (d) negative space (área desimpedida à esquerda ou à direita) para texto e ícones sem poluição visual; (e) iluminação dramática (rim lighting / edge light) e fundo com shallow depth of field (cinematic bokeh); (f) NÃO renderizar palavras longas ou parágrafos na imagem para evitar distorção tipográfica; (g) aspect ratio estritamente 4:5 vertical (1080×1350), safe zone 1:1 central.
+    ✅ METADADO ESTRUTURADO — os slides 1, 2, 4 e 5 DEVEM incluir o objeto "ctr" (o slide 2 é a 2ª impressão do algoritmo e também funciona como capa): "gatilho_emocional" (exatamente um de: surpresa, mistério, urgência, superação), "texto_de_impacto" (3 a 4 palavras que complementam o text_overlay SEM repetir nenhuma palavra de conteúdo dele), "lado_negative_space" ("esquerda" ou "direita" — o lado da área desimpedida onde texto e card sentam; descreva o mesmo lado no prompt_en, ex. "subject on the right, clean negative space on the left"), "paleta_complementar" ({{"destaque": "#RRGGBB", "contraste": "#RRGGBB"}} — o par de alto contraste do item (b), sempre da família da paleta da marca). Payloads antigos sem "ctr" continuam válidos: o motor preenche os padrões do eixo."""
     + """
 
 Retorne JSON:
@@ -1088,9 +1239,15 @@ Retorne JSON:
       "text_overlay": "...",
       "estilo": "...",
       "usa_foto_real": true,
-      "tipo_foto": "fachada",
-      "referencias": ["fachada", "logo"],
-      "tag_navegacao": "Mova para o próximo ➔"
+      "tipo_foto": "recepcao_unidade",
+      "referencias": ["recepcao_unidade", "logo"],
+      "tag_navegacao": "Mova para o próximo ➔",
+      "ctr": {
+        "gatilho_emocional": "mistério",
+        "texto_de_impacto": "Futuro já começou",
+        "lado_negative_space": "esquerda",
+        "paleta_complementar": {"destaque": "#FFC20E", "contraste": "#F58220"}
+      }
     }
   ],
   "paleta_cores": {

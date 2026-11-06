@@ -376,7 +376,12 @@ def _slides_base(brief: dict, prompts: dict | None) -> list[dict]:
         itens.append({
             "numero": numero,
             "tipo": (prompt.get("tipo") or linha.get("tipo") or (base.tipo if base else "Entrega")),
-            "texto": (prompt.get("texto") or linha.get("texto") or (base.texto if base else "")),
+            "texto": (
+                prompt.get("texto")
+                or prompt.get("text_overlay")
+                or linha.get("texto")
+                or (base.texto if base else "")
+            ),
             "referencia": (
                 (prompt.get("referencias") or [None])[0]
                 or (base.tipo_foto if base else None)
@@ -387,14 +392,18 @@ def _slides_base(brief: dict, prompts: dict | None) -> list[dict]:
 
 
 def _slides_do_prompt(prompts: dict | None) -> dict:
-    """Indexa o payload de prompts por número de slide."""
+    """Indexa o payload de prompts por número de slide (suporta 'slide' e 'slide_num')."""
     if isinstance(prompts, list):
         lista = prompts
     elif isinstance(prompts, dict):
         lista = prompts.get("slides") or prompts.get("prompts_slides") or []
     else:
         lista = []
-    return {s.get("slide"): s for s in lista if isinstance(s, dict)}
+    return {
+        (s.get("slide") if s.get("slide") is not None else s.get("slide_num")): s
+        for s in lista
+        if isinstance(s, dict)
+    }
 
 
 def _papel(tipo: str, indice: int) -> str:
