@@ -914,11 +914,18 @@ def gerar_cronograma(ideias: list, forcar: bool = False) -> dict | None:
 
 def gerar_slides_ideia(ideia: dict, prompts_data: dict | None = None) -> list:
     """Renderiza os slides de UMA ideia com o template do eixo (ou enriquecido com prompts_data).
-    Retorna lista de tuplas (nº slide, bytes, info)."""
+    Retorna lista de tuplas (nº slide, bytes, info).
+
+    Um nonce novo por carrossel sorteia as fotos do catálogo (sem repetir dentro
+    dele) e dá variedade entre ideias, em vez de fixar sempre a 1ª foto da cena.
+    """
+    import random
+
     tkey = eixo_para_template(ideia.get("eixo", "Didático"))
+    nonce = random.randrange(1 << 62)
     if prompts_data:
-        return generate_all_slides(tkey, ideia.get("slides_sugeridos", []), prompts_data=prompts_data)
-    return generate_all_slides(tkey, ideia.get("slides_sugeridos", []))
+        return generate_all_slides(tkey, ideia.get("slides_sugeridos", []), prompts_data=prompts_data, nonce=nonce)
+    return generate_all_slides(tkey, ideia.get("slides_sugeridos", []), nonce=nonce)
 
 
 def processar_lote(

@@ -10,7 +10,7 @@ import zipfile
 
 import streamlit as st
 
-from tabs._ui import esc, api_key_ok, empty_state
+from tabs._ui import esc, api_key_ok, empty_state, foto_nonce
 from image_utils import create_slide_from_template, add_text_overlay, render_carousel_from_prompts
 from templates import TEMPLATES, eixo_para_template
 
@@ -62,7 +62,10 @@ def render() -> None:
 
     if st.button("🖼️ Gerar Slide", type="primary", width="stretch"):
         with st.spinner("Gerando slide…"):
-            sb, info = create_slide_from_template(tpl_key, int(slide_num), slide_text or "", return_info=True)
+            sb, info = create_slide_from_template(
+                tpl_key, int(slide_num), slide_text or "", return_info=True,
+                nonce=foto_nonce(novo=True),
+            )
             st.image(sb, caption=f"Slide {slide_num} — {tpl_data['nome']}")
             if info.get("truncated"):
                 st.warning(f"⚠️ Texto não coube nem com fonte {info['font_size']}px — {info['dropped']} linha(s) cortada(s). Encurte o texto.")
@@ -113,8 +116,11 @@ def render() -> None:
                 progress = st.progress(0)
                 all_slides: list[tuple[int, bytes, dict]] = []
                 avisos: list[str] = []
+                nonce_m3 = foto_nonce(novo=True)
                 for i, slide in enumerate(textos_edit):
-                    sb, info = create_slide_from_template(tkey, slide["slide"], slide["texto"], return_info=True)
+                    sb, info = create_slide_from_template(
+                        tkey, slide["slide"], slide["texto"], return_info=True, nonce=nonce_m3
+                    )
                     all_slides.append((slide["slide"], sb, info))
                     if info.get("truncated"):
                         avisos.append(f"⚠️ Slide {slide['slide']}: texto não coube nem com fonte {info['font_size']}px — {info['dropped']} linha(s) cortada(s). Encurte o texto e gere de novo.")
@@ -161,7 +167,7 @@ def render() -> None:
             st.warning("⚠️ Cole os prompts em inglês antes de gerar.")
         else:
             with st.spinner("Renderizando lâminas HD (1080×1350)…"):
-                slides_m4 = render_carousel_from_prompts(prompts_txt_raw)
+                slides_m4 = render_carousel_from_prompts(prompts_txt_raw, nonce=foto_nonce(novo=True))
                 st.success(f"✅ {len(slides_m4)} lâminas geradas com sucesso!")
                 cols_m4 = st.columns(4)
                 for idx_m4, (sn_m4, sb_m4, _) in enumerate(slides_m4):

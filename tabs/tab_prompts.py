@@ -23,7 +23,7 @@ from config import CORES
 from image_utils import render_carousel_from_prompts
 from prompts import DICAS_SERIE_FLOW, cor_eh_valida, formatar_txt_prompts, validate_prompts
 from refs_catalog import arquivo_principal, rotulos_referencias
-from tabs._ui import api_key_ok, clipboard_button, empty_state, esc, seletor_fidelidade
+from tabs._ui import api_key_ok, clipboard_button, empty_state, esc, foto_nonce, seletor_fidelidade
 from templates import eixo_para_template
 
 
@@ -48,6 +48,7 @@ def render():
 
     ideias_sel = st.session_state["ideias_selecionadas"]
     fidelidade = seletor_fidelidade("fidelidade_prompts")
+    nonce = foto_nonce()  # mesma semente do render local; muda só quando se gera
 
     # ── P1-1: Botão "Gerar para Todas" ──────────────────────────────────
     with st.container(border=True):
@@ -57,6 +58,7 @@ def render():
             if not api_key_ok():
                 st.warning("⚠️ Configure a chave API Gemini.")
             else:
+                foto_nonce(novo=True)  # nova semente de fotos para esta geração
                 progress = st.progress(0)
                 status = st.empty()
                 avisos_gerais: list[str] = []
@@ -177,6 +179,7 @@ def render():
         if not api_key_ok():
             st.warning("⚠️ Configure a chave API Gemini.")
         else:
+            foto_nonce(novo=True)  # nova semente de fotos para esta geração
             ideia = opcoes_p[escolha]
             with st.spinner("🤖 Gerando prompts de imagem…"):
                 avisos_gen: list = []
@@ -438,9 +441,10 @@ def render():
                 refs = slide.get("referencias", [])
                 if refs:
                     partes = []
+                    ocorrencia = {1: 0, 4: 1, 5: 2}.get(snum, 0)  # papel do slide no sorteio
                     for r in refs:
                         rot = ref_labels.get(r, r)
-                        arq = arquivo_principal(r)
+                        arq = arquivo_principal(r, nonce, ocorrencia)
                         partes.append(f"{rot} (`{arq}`)" if arq else rot)
                     st.markdown(f"**📎 Referências para anexar no Flow:** {' | '.join(partes)}")
 
@@ -482,6 +486,7 @@ def render():
                     template_key=tkey_ref,
                     eixo=eixo_ref,
                     cta_keyword=ideia_ref.get("cta") or None,
+                    nonce=foto_nonce(novo=True),
                 )
                 st.session_state[f"_slides_hd_gerados_{idx_p}"] = slides_hd
 

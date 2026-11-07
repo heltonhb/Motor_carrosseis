@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from functools import lru_cache
 from pathlib import Path
 
@@ -83,15 +84,46 @@ def arquivos(chave: str) -> list[Path]:
     return [REFS_DIR / nome for nome in cena.get("arquivos", []) if (REFS_DIR / nome).is_file()]
 
 
-def arquivo_principal(chave: str) -> str | None:
-    """Caminho relativo do primeiro arquivo da cena (para exibir/exportar)."""
-    lista = arquivos(chave)
-    if not lista:
+def fotos_embaralhadas(chave: str, nonce: int | None = None) -> list[Path]:
+    """Fotos de uma cena em ordem embaralhada de forma determinística pelo nonce.
+
+    O mesmo par (chave, nonce) devolve sempre a mesma ordem — é isso que faz o
+    render local e a sugestão de referência do Flow sortearem JUNTOS e de forma
+    estável enquanto o usuário visualiza. `nonce=None` preserva a ordem do
+    catálogo (compatibilidade com testes e chamadas antigas).
+    """
+    arqs = arquivos(chave)
+    if not arqs or nonce is None:
+        return arqs
+    ordem = list(arqs)
+    random.Random(f"{nonce}|{chave}").shuffle(ordem)
+    return ordem
+
+
+def foto_para(chave: str, ocorrencia: int = 0, nonce: int | None = None) -> Path | None:
+    """Sorteia a foto de uma cena para a N-ésima vez que ela é pedida num carrossel.
+
+    Embaralha pelo nonce e cicla (`% len`): dentro de um carrossel cada slide usa
+    um índice de papel diferente (0/1/2), então não repete enquanto a categoria
+    tiver fotos suficientes; quando acabam, recomeça.
+    """
+    ordem = fotos_embaralhadas(chave, nonce)
+    if not ordem:
         return None
+    return ordem[ocorrencia % len(ordem)]
+
+
+def _relativo(caminho: Path) -> str:
     try:
-        return str(lista[0].relative_to(Path(__file__).resolve().parent))
+        return str(caminho.relative_to(Path(__file__).resolve().parent))
     except ValueError:
-        return str(lista[0])
+        return str(caminho)
+
+
+def arquivo_principal(chave: str, nonce: int | None = None, ocorrencia: int = 0) -> str | None:
+    """Caminho relativo da foto sorteada da cena (1ª do catálogo quando nonce=None)."""
+    f = foto_para(chave, ocorrencia, nonce)
+    return _relativo(f) if f else None
 
 
 def texto_catalogo_para_prompt() -> str:

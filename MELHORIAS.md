@@ -744,6 +744,149 @@ dependência nova — lembrar no deploy (Streamlit Cloud) que o wheel é grande
 
 ---
 
+## ✅ CONCLUÍDO — Bloco 30 (2026-11-05): reclassificação do catálogo de fotos
+
+**Pedido:** "reclassificar as fotos da pasta `refs` para que cada uma seja
+exatamente o que pede o prompt; na dúvida, perguntar". Passei as 37 fotos por
+descrição visual (agentes em paralelo) e conferi cada `arquivos` de
+`refs/catalogo.json` contra o `desc_en` da cena. Correções aplicadas:
+
+- **Movidas (erradas na cena anterior):** `IMG_20251018_111746` e
+  `IMG_20251108_092107` (laboratorio/apoio → **alunos_robotica**, são kit
+  LEGO); `IMG_20251108_111403` (programacao → **alunos_apoio**, escreve em
+  ficha de papel, sem código/fone); `Foto (160)` (apoio → **recepcao_unidade**,
+  duas adultas revisando material, não aluno).
+- **Novas robótica (3 nítidas) → alunos_robotica:** `IMG_20260822_124047`,
+  `IMG_20260905_103451`, `IMG_20260905_113711`. As outras 2 novas ficaram em
+  `excluidas` por qualidade: `20261024_125429` (girada 90°) e
+  `IMG_20260822_104224` (torta) — reendireitar/refazer antes de usar.
+- **Bijuteria → alunos_apoio:** `IMG_20260717_150324` e `IMG_20260717_150415`
+  (crianças fazendo pulseira com contas; decisão do usuário de manter como
+  atividade de sala, embora o `desc_en` fale de fichas).
+- **Decisão do usuário de MANTER** mesmo sem encaixe perfeito:
+  `IMG_20250510_113012` (retrato de premiação, recepção) e
+  `IMG_20260717_153307` (selfie, equipe).
+- **Capturas de tela → excluidas:** os 2 PNG `Captura de tela_2026-10-26_*`
+  são frames de vídeo com UI sobreposta.
+- **Total:** 34 arquivos em cenas + 7 em `excluidas`; todo jpg/jpeg/png de
+  `refs/` agora contabilizado (vídeos mp4 ficam fora, não são foto).
+
+**Efeito colateral em teste:** `test_card_evita_rosto_na_foto` usava
+`_selecionar_foto_cena("alunos_apoio", 0)`, que era `Foto (160)`; com a
+reordenação caiu na menina de costas (sem rosto frontal → Haar não acha).
+Fix: o teste agora **pina `refs/Foto (160).jpg` direto** (o box já era
+calibrado pra ela), ficando imune à ordem do catálogo. 302 verdes; ruff limpo.
+
+---
+
+## ✅ CONCLUÍDO — Bloco 31 (2026-11-05): sorteio aleatório de fotos por categoria
+
+**Pedido:** quando um slide pede uma foto de uma categoria do catálogo (ex.:
+"aluno na sala de apoio"), sortear entre as fotos daquela categoria para evitar
+repetições — hoje era sempre a 1ª (ordem fixa por índice).
+
+**Decisões do usuário:** (1) sem repetir dentro do mesmo carrossel; (2) vale
+tanto para os slides renderizados quanto para a sugestão "📎 Referências para
+anexar no Flow"; (3) sorteio novo a cada geração, estável enquanto visualiza.
+
+- **Mecanismo — sorteio determinístico por nonce** (`refs_catalog.py`):
+  `fotos_embaralhadas(chave, nonce)` embaralha as fotos da cena com semente
+  `random.Random(f"{nonce}|{chave}")`; `foto_para(chave, ocorrencia, nonce)`
+  devolve `ordem[ocorrencia % len]`. Mesmo nonce → mesma ordem (estável nos
+  reruns do Streamlit); nonce novo → conjunto novo; `nonce=None` preserva a
+  ordem do catálogo (compat com testes). Como os slides 1/4/5 já usam papéis
+  0/1/2, três slides da mesma categoria pegam fotos diferentes — só repete
+  quando a categoria tem menos fotos que os slides (regra pedida).
+- **`_selecionar_foto_cena`** ganhou `nonce`; `render_slide_hd`,
+  `create_slide_from_template`, `generate_all_slides` e
+  `render_carousel_from_prompts` propagam `nonce`. Os 6 pontos de foto do
+  renderer (slides 1/4/5, grade do 6, fachada do 7) passaram a sortear.
+- **Nonce da sessão** (`tabs/_ui.py::foto_nonce(novo=...)`): fica em
+  `st.session_state["foto_nonce"]`; `novo=True` sorteia um novo (no clique em
+  gerar), `novo=False` só lê (estável). `tab_imagens` bumpa nos 3 modos de
+  render; `tab_prompts` bumpa ao gerar prompts e no render local HD, e lê o
+  mesmo nonce na sugestão do Flow → os dois sorteiam juntos. `batch_engine`
+  usa um nonce por carrossel (variedade entre ideias).
+- **Teste:** `test_sorteio_de_fotos_por_nonce` cobre estabilidade, permutação,
+  não-repetição entre papéis, ciclo e mudança por nonce. 303 verdes; nenhum
+  erro de ruff novo nos arquivos tocados (os 35 do repo são dívida pré-existente
+  em app.py/notebooklm/tabs que não toquei).
+
+---
+
+## ✅ CONCLUÍDO — Bloco 32 (2026-11-06): refatoração do motor HD + pacote visual dos cards de vidro
+
+Origem: revisão crítica de `image_utils.py` (~2.400 linhas). Duas frentes no
+mesmo dia: **refatoração estrutural** (Fases 1–3) e **melhorias visuais
+aprovadas pelo usuário** ("Pacote completo A+B+C1+D+E", grifo estilo
+"Sublinhado grosso"). Artefatos em `teste_fase3_06-11-2026/` (PNGs "antes"
+preservadas como `slide_0X_antes.png`, `evidencias.txt` atualizado).
+
+**Refatoração (sem mudança visual):**
+- **F1. Copy editorial em `config.py`** (`UNIDADE`, `FORMATO`, kickers das
+  lâminas) — textos marketing saem do Minnesota-esco do renderer.
+- **F2. Exceções logadas** em vez de silenciadas.
+- **F3. `render_slide_hd` quebrado em `_slide_01`..`_slide_08` + `_RENDERERS`
+  + `_CtxLamina`** — cada lâmina é função pura; o despachante resolve
+  preamble (cena, ctr, cores) uma vez e fecha o slide. `fit_slide_text`
+  virou adapter do `_medir_bloco` (7-tuple `(tam, fonte, linhas, auto,
+  truncado, cortadas, bloco)`), com `_LEADING_P1=1.26`.
+- **Fix guard-de-rostos (regra 2b em `_mapa_pele`**: cabeça de costas na
+  base da foto agora bloqueia card tanto quanto rosto frontal
+  (`_PELE_CABECA_MAX_LADO=7` etc.); validado com as fotos de
+  `IMG_20250830_100933` / `IMG_20251108_111348` e 4/4 testes do guard.
+
+**Pacote visual dos cards (sobre `_draw_rounded_card_with_shadow` ~L430):**
+- **B1. Sombra do card de foto com tom de foto**: param `shadow_rgb`,
+  default `(8,18,34)` nos callers; fill alpha 248 + hairline branco 205/1px
+  no modo glass.
+- **B2. Kicker-card vira chip sólido** (`_draw_kicker(chip=True, max_w=...)`):
+  pílula Brand Blue com texto branco; auto-encolhimento até size 12 sem
+  colidir com número/`lag_chip`; `_PAD_CARD` 44→48, folga do `_altura_para`
+  52→58, extras `{"triade": 72, "brain_topo": 96}`.
+- **B2b. Número fantasma da lâmina**: `_CtxLamina.numero` desenhado `01`…
+  fonte 40 (2×), `alpha 70`, anchor "rs" na borda direita do card.
+- **B3+C1. Grifo "Sublinhado grosso"** (`_draw_text_block`): barra 8px (2×)
+  na base do span sob `bbox[3]+6*_SCALE`, clampada ao card e ao bloco;
+  `_highlight_spans` corta pontuação das bordas do span (não grifa "." ou "?"
+  sozinhos).
+- **B4. Scrim local sobre foto clara**: se `_luminancia` da região do card
+  > 0,62, véu `(8,18,34)` alpha proporcional antes do card — contraste sem
+  escurecer a foto toda.
+- **B5. Tríade compacta**: círculos pastel `r=40` ancorados à margem do
+  texto (`cx = x0+_PAD_CARD+40+i*132`, ícones 40 Brand Blue). Slide 1 do
+  nonce 7 omitiu a tríade (`icone_omitido=True`) — comportamento previsto
+  do guard (faixa livre da foto não comporta).
+- ** Vidro suavizado**: `_glass_fill_radial` glass `center_alpha=246,
+  edge_alpha=200` (antes 250/140 — "cara de travesseiro") e sheen máx 55→40.
+- **Padronização de raios**: cards 28→24 e nav-tag `radius=28`→24 (única
+  exceção: botão WhatsApp 84).
+
+**Fix de escala (`lag_chip`, `_draw_kicker`)**: misturava medidas 1× (2×
+px de `draw.textlength` com fonte 2×) com coordenadas de layout e não
+subtraiu `x0` — largura correta: `(x1-x0-2*_PAD_CARD) -
+textlength(fonte_2x)/_SCALE - 24`; sem número, `x1-x0-2*_PAD_CARD`.
+
+**Regressão:** `test_image_fix.py` (P1/P2 + guard 4/4), `test_carrossel_vivo.py`
+e `test_catalogo.py` todos verdes no `.venv`; 8 lâminas re-renderizadas
+(nonce=7, mesma copy do teste de 05-11) — visual conferido: chip não colide
+com o "01", sublinhado grosso em todos os spans, vidro limpo.
+
+**Fix tardio do dia — cabelo claro/ruivo (regra 2c em `_mapa_pele`):** o
+usuário reportou o card do slide 5 encobrindo as duas meninas de cabelo
+ruivo (de costas). Causa: cabelo ruivo tem Y ~90–115 — fora do limiar de
+"bloco escuro" `Y<70` da regra 2 e invisível ao Haar (rosto de costas).
+Mecanismo: nova grade `claro` (fração de px com `Y<120`) + regra 2c — bloco
+compacto (≥60% px abaixo de Y 120, ≥2 vizinhos densos) na metade de cima,
+com pele genuína adjacente em 8 direções (a regra 3 então protege
+bochecha/testa encostadas). Mesa amarela e madeira clara ficam de fora
+(quase 0% dos px abaixo de Y 120); cabelo ruivo deixa 15–60% de sombra.
+Resultado: slide 5 rosto **0.433 → 0.011** (card desceu para a mesa,
+nenhuma cabeça coberta); slides 1/4 imutáveis; slide 7 (fachada com mascote
+Mônica) aceita um dy=160 inofensivo (não é pessoa real).
+
+---
+
 ## 🔌 PLANEJADO — Bloco 19 (2026-10-14): Carrossel Vivo
 
 Origem: escada de 7 níveis de criação de carrossel do vídeo

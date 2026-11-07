@@ -57,3 +57,33 @@ def test_anexos_gemini_opcional():
     assert len(anexos) == len(CENAS_FOTO) + 1
     for nome, mime, dados in anexos:
         assert nome and mime.startswith("image/") and dados
+
+
+def test_sorteio_de_fotos_por_nonce():
+    """Sorteio aleatório entre as fotos de uma cena, estável por nonce e sem
+    repetir dentro de um carrossel (papéis 0/1/2 dos slides 1/4/5)."""
+    from refs_catalog import arquivos, foto_para, fotos_embaralhadas
+
+    chave = "alunos_robotica"
+    arqs = arquivos(chave)
+    assert len(arqs) >= 3, "cena precisa de >=3 fotos para o teste de variedade"
+
+    # nonce=None preserva a ordem do catálogo (compat com chamadas antigas)
+    assert fotos_embaralhadas(chave, None) == arqs
+    assert foto_para(chave, 0, None) == arqs[0]
+
+    # determinístico: mesmo nonce → mesma ordem, e é permutação do catálogo
+    n = 123456789
+    assert fotos_embaralhadas(chave, n) == fotos_embaralhadas(chave, n)
+    assert sorted(fotos_embaralhadas(chave, n)) == sorted(arqs)
+
+    # sem repetição entre os papéis 0/1/2 (slides 1/4/5 caindo na mesma cena)
+    tres = [foto_para(chave, i, n) for i in (0, 1, 2)]
+    assert len(set(tres)) == 3
+
+    # cicla quando acaba (ocorrência % len)
+    assert foto_para(chave, len(arqs), n) == foto_para(chave, 0, n)
+
+    # nonces diferentes dão ordens diferentes (é sorteio de verdade, não rotação)
+    ordens = {tuple(fotos_embaralhadas(chave, k)) for k in range(1, 6)}
+    assert len(ordens) > 1

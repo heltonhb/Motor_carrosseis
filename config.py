@@ -11,6 +11,7 @@ UNIDADE = {
     "nome": "Ensina Mais Tatuapé",
     "instagram": "@ensinamais.tatuape",
     "endereco": "Rua Coelho Lisboa, 783 – Tatuapé, São Paulo",
+    "endereco_curto": "Rua Coelho Lisboa, 783 • Tatuapé",
     "whatsapp": "(11) 94475-0009",
     "colégios_vizinhos": ["Mendel", "Santo Antônio de Lisboa", "Espírito Santo"],
     "publico": "Pais de classes A/B do Tatuapé, filhos no Ensino Fundamental",

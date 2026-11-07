@@ -62,6 +62,8 @@ def test_card_evita_rosto_na_foto():
     """Rosto frontal real (Haar) vira cobertura no mapa; o card desce para
     liberar a cabeça. Usa a foto da unidade, não elipse sintética — Haar só
     responde a rosto de verdade."""
+    from pathlib import Path
+
     from image_utils import (
         _H2,
         _W2,
@@ -69,10 +71,12 @@ def test_card_evita_rosto_na_foto():
         _mapa_pele,
         _posicionar_card_sem_rosto,
         _score_rosto,
-        _selecionar_foto_cena,
     )
 
-    base = _cover_crop(_selecionar_foto_cena("alunos_apoio", 0), _W2, _H2)
+    # Foto fixa com rostos frontais: o box abaixo foi calibrado para ela, e
+    # pinar o arquivo deixa o teste imune à ordem/realocação do catálogo.
+    foto = Path(__file__).resolve().parent / "refs" / "Foto (160).jpg"
+    base = _cover_crop(foto, _W2, _H2)
     mapas = _mapa_pele(base)
     # Haar precisa ter achado rostos (células com cobertura ≥0.5 no mapa)
     assert any(v >= 0.5 for linha in mapas[0] for v in linha)

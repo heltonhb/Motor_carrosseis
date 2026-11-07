@@ -6,10 +6,25 @@ Extraídos do app.py para eliminar duplicação e manter as tabs enxutas.
 
 import html as _html
 import json
+import random
 
 import streamlit as st
 
 from config import CORES, FLOW_FOTOS, TONES, TONES_PADRAO
+
+
+def foto_nonce(*, novo: bool = False) -> int:
+    """Semente do sorteio de fotos do catálogo, guardada na sessão.
+
+    Um mesmo nonce → as mesmas fotos (estável enquanto o usuário visualiza,
+    inclusive nos rerun do Streamlit); `novo=True` sorteia um nonce diferente,
+    usado no clique em gerar para dar um conjunto novo a cada geração. É o
+    mesmo nonce que o render local e a sugestão de referência do Flow usam,
+    então os dois sorteiam juntos.
+    """
+    if novo or "foto_nonce" not in st.session_state:
+        st.session_state["foto_nonce"] = random.randrange(1 << 62)
+    return st.session_state["foto_nonce"]
 
 
 def esc(texto) -> str:
