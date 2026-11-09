@@ -289,22 +289,52 @@ def _selecionar_foto_cena(
     determinística: `indice_variacao` é o papel do slide (1→0, 4→1, 5→2), então
     slides que caem na mesma categoria pegam fotos diferentes e não repetem
     dentro do carrossel. Sem `nonce` mantém a ordem fixa do catálogo.
+
+    Quando há ≥2 fotos disponíveis, prefere aquela com mais células livres de
+    rosto (calculado via _mapa_pele em baixa resolução para custo mínimo) — evita
+    que o posicionador do card glass sempre caia sobre cabeças. A foto padrão do
+    embaralhamento ainda é usada como candidata, garantindo diversidade entre
+    gerações com nonces diferentes.
     """
-    if nonce is not None:
-        sorteada = foto_para(chave_cena, indice_variacao, nonce)
-        if sorteada is not None:
-            return sorteada
     lista = arquivos(chave_cena)
-    if lista:
-        return lista[indice_variacao % len(lista)]
-    fallback = REFS_DIR / "Fachada.png"
-    if fallback.is_file():
+    if not lista:
+        fallback = REFS_DIR / "Fachada.png"
+        if fallback.is_file():
+            return fallback
+        for padrao in ("*.jpg", "*.png"):
+            encontrados = sorted(REFS_DIR.glob(padrao))
+            if encontrados:
+                return encontrados[0]
         return fallback
-    for padrao in ("*.jpg", "*.png"):
-        encontrados = sorted(REFS_DIR.glob(padrao))
-        if encontrados:
-            return encontrados[0]
-    return fallback
+
+    if nonce is not None:
+        # Candidata principal: a que o embaralhamento escolheria
+        from refs_catalog import foto_para as _foto_para
+        sorteada = _foto_para(chave_cena, indice_variacao, nonce)
+        if sorteada is None:
+            sorteada = lista[indice_variacao % len(lista)]
+
+        # Com ≥2 fotos, avalia todas (até 5) e escolhe a que tem mais células
+        # livres de rosto — garante que a foto com melhor composição seja usada,
+        # independente da ordem do embaralhamento do nonce.
+        if len(lista) >= 2:
+            candidatas = lista[:5]  # máx 5 fotos para não onerar o render
+            melhor_foto = sorteada
+            melhor_livres = -1
+            for candidata in candidatas:
+                try:
+                    img_mini = _cover_crop(candidata, _W2 // 4, _H2 // 4)
+                    _, cabeca = _mapa_pele(img_mini)
+                    livres = sum(1 for j in range(_PELE_LINHAS) for i in range(_PELE_COLS) if not cabeca[j][i])
+                except Exception:
+                    livres = 0
+                if livres > melhor_livres:
+                    melhor_livres = livres
+                    melhor_foto = candidata
+            return melhor_foto
+        return sorteada
+
+    return lista[indice_variacao % len(lista)]
 
 
 def _desenhar_scrim(
@@ -369,27 +399,125 @@ def _glass_fill_radial(
     base.alpha_composite(card, (x0, y0))
 
 
-def _draw_glass_sheen(base: Image.Image, box: tuple[int, int, int, int], radius: int) -> None:
-    """Reflexo de vidro CONTIDO: faixa diagonal estreita no canto superior
-    esquerdo (a sobrancelha do card), que morre antes de alcançar a área de
-    texto."""
+def _draw_glass_neon_border(
+    base: Image.Image,
+    box: tuple[int, int, int, int],
+    radius: int,
+    glow_color: tuple[int, int, int] = (0, 200, 220),
+    glow_alpha: int = 220,
+    glow_spread: int = 14,
+) -> None:
+    """Borda com glow neon: linha fina brilhante + halo difuso para fora.
+
+    Três camadas:
+    1. Halo externo (blur largo) — o "neon" que irradia para fora do card
+    2. Borda média (blur médio) — corpo luminoso da linha
+    3. Borda interna fina branca — aresta do vidro, dá espessura
+
+    `glow_color` é o RGB do neon (padrão: ciano da marca Brand Blue adaptado).
+    """
     x0, y0, x1, y1 = box
     w, h = x1 - x0, y1 - y0
-    faixa_x = max(8, int(w * 0.25))
+
+    # Expande o canvas para o halo não ser cortado na borda do card
+    pad = glow_spread * 2
+    canvas_w, canvas_h = w + pad * 2, h + pad * 2
+
+    # ── Camada 1: halo difuso (spread largo) ─────────────────────────────────
+    halo = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    hd = ImageDraw.Draw(halo)
+    hd.rounded_rectangle(
+        [pad, pad, pad + w - 1, pad + h - 1],
+        radius=radius,
+        outline=(*glow_color, int(glow_alpha * 0.55)),
+        width=max(1, glow_spread // 2),
+    )
+    halo = halo.filter(ImageFilter.GaussianBlur(glow_spread * 0.9))
+
+    # ── Camada 2: borda brilhante (blur leve) ────────────────────────────────
+    rim = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    rd = ImageDraw.Draw(rim)
+    rd.rounded_rectangle(
+        [pad, pad, pad + w - 1, pad + h - 1],
+        radius=radius,
+        outline=(*glow_color, glow_alpha),
+        width=max(2, glow_spread // 4),
+    )
+    rim = rim.filter(ImageFilter.GaussianBlur(glow_spread * 0.25))
+
+    # ── Camada 3: aresta interna branca fina ─────────────────────────────────
+    edge = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    ed = ImageDraw.Draw(edge)
+    ed.rounded_rectangle(
+        [pad + 1, pad + 1, pad + w - 2, pad + h - 2],
+        radius=max(0, radius - 1),
+        outline=(255, 255, 255, 160),
+        width=2,
+    )
+
+    # Compõe as três camadas e recorta no canvas do card (com o pad)
+    glow_layer = Image.alpha_composite(halo, rim)
+    glow_layer = Image.alpha_composite(glow_layer, edge)
+
+    # Cola no base compensando o pad
+    base.alpha_composite(glow_layer, (x0 - pad, y0 - pad))
+
+
+def _draw_glass_sheen(base: Image.Image, box: tuple[int, int, int, int], radius: int) -> None:
+    """Reflexo de vidro: faixa diagonal no canto superior esquerdo + noise sutil.
+
+    Sheen mais suave neste estilo (o glow neon já dá o destaque visual);
+    mantemos o grain para quebrar a uniformidade plástica.
+    """
+    import random as _rng
+
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+
+    # ── Sheen diagonal (reflexo de luz) ──────────────────────────────────────
+    faixa_x = max(10, int(w * 0.40))
     rampa = Image.new("L", (64, 64))
     px = rampa.load()
     for yy in range(64):
         for xx in range(64):
-            t = xx / 63 * 0.7 + yy / 63 * 0.3
-            # fade diagonal dentro da faixa; zero fora dela
+            t = xx / 63 * 0.60 + yy / 63 * 0.40
             dentro = max(0.0, 1.0 - max(0.0, (xx / 63 * w - faixa_x) / max(1, faixa_x)))
-            px[xx, yy] = int(40 * max(0.0, 1.0 - t * 1.4) * dentro)
+            px[xx, yy] = int(_GLASS_SHEEN * max(0.0, 1.0 - t * 1.2) * dentro)
     grad = rampa.resize((w, h), Image.BILINEAR)
     mask = Image.new("L", (w, h), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=255)
     sheen = Image.new("RGBA", (w, h), (255, 255, 255, 0))
     sheen.putalpha(ImageChops.multiply(grad, mask))
     base.alpha_composite(sheen, (x0, y0))
+
+    # ── Noise de textura (grain) ──────────────────────────────────────────────
+    _rng_seed = (x0 + y0 * 7) & 0xFFFF
+    _rng.seed(_rng_seed)
+    noise_w, noise_h = max(1, w // 4), max(1, h // 4)
+    noise = Image.new("RGBA", (noise_w, noise_h), (0, 0, 0, 0))
+    np_px = noise.load()
+    for ny in range(noise_h):
+        for nx in range(noise_w):
+            v = _rng.randint(0, 255)
+            np_px[nx, ny] = (v, v, v, 8)
+    noise = noise.resize((w, h), Image.BILINEAR)
+    noise_masked = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    noise_masked.paste(noise, (0, 0), mask)
+    base.alpha_composite(noise_masked, (x0, y0))
+
+
+# ─── Receita do vidro (transparência) ────────────────────────────────────────
+# Quanto MENOR cada valor, mais a foto aparece através do card. O blur dá a
+# textura de vidro; quem embranquece o painel é o tint branco + o véu de fill +
+# o reflexo. Mexer só nestas constantes basta para regular "mais/menos vidro".
+_GLASS_BLUR_NUCLEO = 0.50      # 1º passe de blur (× raio)
+_GLASS_BLUR_FINO = 0.25        # 2º passe: desfoque fino sobre o primeiro
+_GLASS_DESSATURACAO = 0.14     # 0 = cor intacta · 1 = cinza total
+_GLASS_TINT_BASE = 0.02        # véu branco mínimo (fundo claro)
+_GLASS_TINT_ESCURO = 0.06      # véu extra em fundo escuro (legibilidade)
+_GLASS_VEU_CENTRO = 26         # alpha do fill no centro do card
+_GLASS_VEU_BORDA = 10          # alpha do fill na borda
+_GLASS_SHEEN = 46              # alpha máximo do reflexo diagonal
 
 
 def _draw_rounded_card_with_shadow(
@@ -423,11 +551,26 @@ def _draw_rounded_card_with_shadow(
         base.alpha_composite(shadow)
 
     if glass:
-        # Glassmorphism: blur da região do fundo + tint branco mais forte sobre áreas escuras
-        region = base.crop((x0, y0, x1, y1)).filter(ImageFilter.GaussianBlur(glass_blur * _SCALE))
+        # ── Glassmorphism estilo "vidro neon" ───────────────────────────────
+        # Referência visual: card praticamente transparente — o fundo desfocado
+        # é o protagonista; a borda com glow neon delimita o card sem preenchê-lo.
+        #
+        # 1) Blur duplo: o fundo real aparece, desfocado e levemente dessaturado
+        blur_r = max(32, glass_blur) * _SCALE
+        region = base.crop((x0, y0, x1, y1))
+        region = region.filter(ImageFilter.GaussianBlur(blur_r * _GLASS_BLUR_NUCLEO))
+        region = region.filter(ImageFilter.GaussianBlur(blur_r * _GLASS_BLUR_FINO))
+
+        # 2) Dessaturação leve: tira só o grito de cor, sem lavar a foto
+        gray_region = region.convert("L").convert("RGBA")
+        region = Image.blend(region.convert("RGBA"), gray_region, _GLASS_DESSATURACAO)
+
+        # 3) Tint mínimo (só o necessário para o texto sobreviver a qualquer fundo)
         lum = _luminancia(region)
-        tint_strength = 0.10 + 0.14 * (1.0 - lum)
-        tinted = Image.blend(region, Image.new("RGBA", region.size, (255, 255, 255, 255)), tint_strength)
+        tint_strength = _GLASS_TINT_BASE + _GLASS_TINT_ESCURO * (1.0 - lum)
+        white_layer = Image.new("RGBA", region.size, (255, 255, 255, 255))
+        tinted = Image.blend(region, white_layer, tint_strength)
+
         mask = Image.new("L", region.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle(
             [0, 0, region.width - 1, region.height - 1], radius=r, fill=255
@@ -435,15 +578,20 @@ def _draw_rounded_card_with_shadow(
         layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
         layer.paste(tinted, (x0, y0), mask)
         base.alpha_composite(layer)
-        # Centro quase opaco (legibilidade); o fade de transparência fica só na
-        # faixa fina de borda (ver _glass_fill_radial)
-        fill = (*fill[:3], 248)
-        if outline is None:
-            outline = (255, 255, 255, 205)
-            outline_width = 1  # hairline: basta sugerir a borda do vidro
+
+        # Fill quase zero: só uma velatura muito fina para unificar o fundo
+        fill = (*fill[:3], _GLASS_VEU_CENTRO)
+        # Borda e outline serão desenhados pelo glow neon abaixo; desativa o
+        # outline padrão para evitar linha dupla
+        outline = None
+        outline_width = 0
 
     if glass:
-        _glass_fill_radial(base, (x0, y0, x1, y1), r, fill[:3], center_alpha=246, edge_alpha=200)
+        # Velatura mínima: apenas unifica o fundo sem cobrir o blur
+        _glass_fill_radial(
+            base, (x0, y0, x1, y1), r, fill[:3],
+            center_alpha=_GLASS_VEU_CENTRO, edge_alpha=_GLASS_VEU_BORDA,
+        )
 
     card_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
     c_draw = ImageDraw.Draw(card_layer)
@@ -458,6 +606,17 @@ def _draw_rounded_card_with_shadow(
 
     if glass:
         _draw_glass_sheen(base, (x0, y0, x1, y1), r)
+        # Glow neon: borda luminosa ciano (Brand Blue adaptado para neon)
+        # com halo difuso para fora — efeito "vidro iluminado" da referência.
+        # _draw_glass_neon_border trabalha em espaço 2× (supersampling).
+        _draw_glass_neon_border(
+            base,
+            (x0, y0, x1, y1),
+            radius=r,
+            glow_color=(0, 210, 230),   # ciano neon próximo do Brand Blue
+            glow_alpha=210,
+            glow_spread=18 * _SCALE,    # spread em px do espaço 2×
+        )
 
 
 _STOPWORDS_GRIFO = frozenset({
@@ -997,13 +1156,31 @@ def _card_sobre_foto(
     draw = ImageDraw.Draw(base)
     x0, y0, x1, y1 = box_card
 
+    # ── Cor do texto adaptativa ao fundo real do card ────────────────────────
+    # Com o card quase transparente, o texto azul da marca pode desaparecer sobre
+    # fundos escuros. Medimos a luminância da região do card já composta (com
+    # blur e tint aplicados) e escolhemos a cor que garante contraste:
+    #   lum < 0.40 → branco (fundo muito escuro)
+    #   lum < 0.60 → azul escuro (#1E293B) — contraste bom em mid-tones
+    #   lum ≥ 0.60 → azul da marca (#007799) — fundo claro, a cor original
+    if cor_texto == HEX_BRAND_BLUE:  # só substitui se for a cor padrão (não overridden)
+        lum_card = _luminancia(base.crop(
+            (x0 * _SCALE, y0 * _SCALE, x1 * _SCALE, y1 * _SCALE)
+        ))
+        if lum_card < 0.40:
+            cor_texto = HEX_WHITE
+        elif lum_card < 0.60:
+            cor_texto = HEX_DARK_NAVY
+
     if numero is not None:
         # número fantasma da lâmina, ancorado no canto oposto ao chip
         f_ghost = _load_font(40 * _SCALE)
+        # usa a mesma lógica de cor adaptativa do texto principal
+        ghost_rgb = _hex_rgba(cor_texto)[:3]
         draw.text(
             ((x1 - _PAD_CARD) * _SCALE, (y0 + topo_kicker) * _SCALE),
             f"{numero:02d}", font=f_ghost,
-            fill=(*_hex_rgba(HEX_BRAND_BLUE)[:3], 70), anchor="rs",
+            fill=(*ghost_rgb, 70), anchor="rs",
         )
         lag_chip = (
             (x1 - x0 - 2 * _PAD_CARD)
@@ -1150,7 +1327,13 @@ def _draw_icon_tablet_passive(draw: ImageDraw.ImageDraw, cx: int, cy: int, size:
     draw.polygon([(cx - int(p * 0.6), cy - p), (cx - int(p * 0.6), cy + p), (cx + p, cy)], outline=color, width=w)
 
 
-def _paste_logo(base: Image.Image, center_x: int, top_y: int, target_w: int, invert_white_box: bool = False) -> None:
+def _paste_logo(base: Image.Image, center_x: int, top_y: int, target_w: int, invert_white_box: bool = False, mapa_pele: tuple[list[list[float]], list[list[bool]]] | None = None) -> None:
+    """Cola o logo na imagem evitando áreas com rostos detectados.
+    
+    Se `mapa_pele` for fornecido, busca posição segura varrendo horizontal e vertical
+    na região superior da foto (acima do card ~y=880), evitando rostos.
+    Caso contrário, usa a posição fixa legada.
+    """
     logo_path = REFS_DIR / "LOGO ENSINA TM ASS PRETA.png"
     if not logo_path.exists():
         return
@@ -1159,6 +1342,54 @@ def _paste_logo(base: Image.Image, center_x: int, top_y: int, target_w: int, inv
         tw = target_w * _SCALE
         th = int(logo.height * (tw / logo.width))
         logo = logo.resize((tw, th), Image.LANCZOS)
+        
+        # Se temos mapa de pele, calcular posição segura
+        if mapa_pele is not None:
+            mapa, cabeca = mapa_pele
+            
+            logo_w_px = tw / _SCALE
+            logo_h_px = th / _SCALE
+            
+            # Varrer horizontalmente (step ~60px = 1 coluna grid) e verticalmente
+            # Limites: margem esquerda/direita, topo original até antes do card (~880)
+            step_x = 60  # ~1 coluna do grid de pele
+            step_y = 30
+            x_min = _MARGEM + 60
+            x_max = 1080 - _MARGEM - 60
+            y_min = top_y
+            y_max = 820  # card começa ~880, logo ~70px + margem
+            
+            def _tem_rosto(px, py):
+                """Verifica se há rosto na área do logo."""
+                i0 = max(0, int((px - logo_w_px/2) * _PELE_COLS / 1080))
+                i1 = min(_PELE_COLS - 1, int((px + logo_w_px/2) * _PELE_COLS / 1080))
+                j0 = max(0, int((py - logo_h_px) * _PELE_LINHAS / 1350))
+                j1 = min(_PELE_LINHAS - 1, int(py * _PELE_LINHAS / 1350))
+                for j in range(j0, j1 + 1):
+                    for i in range(i0, i1 + 1):
+                        if cabeca[j][i] or mapa[j][i] >= 0.5:
+                            return True
+                return False
+            
+            # Buscar primeira posição (x, y) sem rosto
+            # Prioriza: y mais alto (topo), depois x mais central
+            center_x, final_y = 540, top_y  # default
+            encontrado = False
+            for cy in range(y_min, y_max + 1, step_y):
+                # Para cada y, testar x do centro para fora (preferência visual)
+                for cx in [540] + [x for pair in zip(
+                    range(540 - step_x, x_min - 1, -step_x),
+                    range(540 + step_x, x_max + 1, step_x)
+                ) for x in pair]:
+                    if x_min <= cx <= x_max and not _tem_rosto(cx, cy):
+                        center_x, final_y = cx, cy
+                        encontrado = True
+                        break
+                if encontrado:
+                    break
+            
+            top_y = final_y
+        
         x = center_x * _SCALE - tw // 2
         y = top_y * _SCALE
         if invert_white_box:
@@ -1250,8 +1481,9 @@ _PELE_Y_CABELO = 70        # luminância abaixo disso conta como cabelo/bloco es
 _PELE_DENS_CABELO = 0.55   # fração de pixels escuros p/ célula ser cabelo
 _PELE_SKIN_MIN = 0.30      # pele genuína ao redor do blob: é cabeça, não móvel
 _PELE_HAIR_VIZ = 2         # vizinhos escuros mínimos: cabelo é bloco, não listra
-_PELE_TOPO_FRAC = 0.45     # blob de cabelo só vale na parte de cima (cabeça fica
-                           # acima; manga/torre de PC ficam embaixo e dariam falso)
+_PELE_TOPO_FRAC = 0.62     # blob de cabelo vale até 62% da altura: cobre rostos
+                           # sentados no terço central (sala de aula, mesa); 0.45
+                           # era curto demais e perdia cabeças abaixo do meio-superior
 _PELE_NAPE_LINHAS = 3      # linhas de pescoço/nuca protegidas abaixo do cabelo
 _PELE_NAPE_MIN = 0.18      # pele (mesmo na sombra) que continua a nuca abaixo do cabelo
 _PELE_CABECA_MAX_LADO = 7  # bbox máx do blob de cabeça (7×7 células ≈ 420×430 px):
@@ -1339,7 +1571,7 @@ def _rostos_haar(base: Image.Image) -> list[tuple[int, int, int, int]]:
         for cascata, espelhar in cascatas:
             src = cv2.flip(gi, 1) if espelhar else gi
             for (x, y, ww, hh) in cascata.detectMultiScale(
-                src[:corte], scaleFactor=1.12, minNeighbors=4, minSize=(30, 30)
+                src[:corte], scaleFactor=1.10, minNeighbors=3, minSize=(28, 28)
             ):
                 if espelhar:
                     x = w - x - ww
@@ -1831,7 +2063,7 @@ def _slide_01(ctx: _CtxLamina) -> tuple[Image.Image, dict, dict | None]:
     base = _cover_crop(_selecionar_foto_cena(ctx.cena, 0, ctx.nonce), _W2, _H2)
     mapa = _mapa_pele(base)
     _desenhar_scrim(base, 0.26, (8, 18, 34), _scrim_alpha_adaptativo(_luminancia(base)), expo=1.2)
-    _paste_logo(base, center_x=_MARGEM + 125, top_y=64, target_w=250, invert_white_box=True)
+    _paste_logo(base, center_x=_MARGEM + 125, top_y=64, target_w=250, invert_white_box=True, mapa_pele=mapa)
     info, card = _card_sobre_foto(
         base, mapa, ctx.texto,
         kicker=_KICKERS_LAMINA[1].format(eixo=ctx.eixo.upper()),
@@ -1939,7 +2171,7 @@ def _slide_04(ctx: _CtxLamina) -> tuple[Image.Image, dict, dict | None]:
     base = _cover_crop(_selecionar_foto_cena(ctx.cena, 1, ctx.nonce), _W2, _H2)
     mapa = _mapa_pele(base)
     _desenhar_scrim(base, 0.34, (8, 18, 34), _scrim_alpha_adaptativo(_luminancia(base)), expo=1.2)
-    _paste_logo(base, center_x=_MARGEM + 110, top_y=64, target_w=220, invert_white_box=True)
+    _paste_logo(base, center_x=_MARGEM + 110, top_y=64, target_w=220, invert_white_box=True, mapa_pele=mapa)
     info, card = _card_sobre_foto(
         base, mapa, ctx.texto, kicker=_KICKERS_LAMINA[4], destaques=ctx.destaques,
         hl_color=ctx.hl, lado_ctr=ctx.lado_ctr or None, icone="brain_topo", max_text_h=260,
@@ -1955,7 +2187,7 @@ def _slide_05(ctx: _CtxLamina) -> tuple[Image.Image, dict, dict | None]:
     base = _cover_crop(_selecionar_foto_cena(ctx.cena, 2, ctx.nonce), _W2, _H2)
     mapa = _mapa_pele(base)
     _desenhar_scrim(base, 0.40, (8, 18, 34), _scrim_alpha_adaptativo(_luminancia(base)), expo=1.2)
-    _paste_logo(base, center_x=_MARGEM + 110, top_y=64, target_w=220, invert_white_box=True)
+    _paste_logo(base, center_x=_MARGEM + 110, top_y=64, target_w=220, invert_white_box=True, mapa_pele=mapa)
     info, card = _card_sobre_foto(
         base, mapa, ctx.texto, kicker=_KICKERS_LAMINA[5], destaques=ctx.destaques,
         hl_color=ctx.hl, lado_ctr=ctx.lado_ctr or None, max_text_h=300,
@@ -2022,6 +2254,7 @@ def _slide_07(ctx: _CtxLamina) -> tuple[Image.Image, dict, dict | None]:
     base = _cover_crop(_selecionar_foto_cena("fachada", 0, ctx.nonce), _W2, _H2)
     mapa = _mapa_pele(base)
     _desenhar_scrim(base, 0.32, (8, 18, 34), _scrim_alpha_adaptativo(_luminancia(base)), expo=1.2)
+    _paste_logo(base, center_x=_MARGEM + 120, top_y=66, target_w=240, invert_white_box=True, mapa_pele=mapa)
     info, card = _card_sobre_foto(
         base, mapa, ctx.texto, kicker=_KICKERS_LAMINA[7],
         destaques=ctx.destaques, hl_color=HEX_PASTEL_BLUE, cor_texto=HEX_DARK_NAVY,
